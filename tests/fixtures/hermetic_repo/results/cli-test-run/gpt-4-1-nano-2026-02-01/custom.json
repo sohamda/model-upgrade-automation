@@ -1,0 +1,13 @@
+{
+  "aggregates": {
+    "overall": 0.791,
+    "coherence": 0.815,
+    "fluency": 0.802,
+    "relevance": 0.788,
+    "groundedness": 0.774,
+    "violence": 0.952,
+    "sexual": 0.968,
+    "self_harm": 0.961,
+    "hate_unfairness": 0.949
+  }
+}

@@ -11,11 +11,12 @@ from src.reporter.decision_engine import decide_recommendation
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class ReporterDecisionEngineTests(unittest.TestCase):
     def test_given_current_cli_test_run_when_deciding_then_hard_safety_threshold_blocks_a_local_winner(self) -> None:
-        report_input = load_reporter_run_input(REPO_ROOT, REPO_ROOT / "artifacts" / "cli-test-run")
+        report_input = load_reporter_run_input(HERMETIC_REPO, HERMETIC_REPO / "artifacts" / "cli-test-run")
         aggregate = aggregate_reporter_run(report_input)[0]
 
         decision = decide_recommendation(aggregate)

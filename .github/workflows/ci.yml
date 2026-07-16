@@ -7,6 +7,10 @@ on:
       - 'config/**'
       - 'docs/**'
       - 'requirements/plan.md'
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
   push:
     branches:
       - main
@@ -15,6 +19,10 @@ on:
       - 'config/**'
       - 'docs/**'
       - 'requirements/plan.md'
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
   workflow_dispatch:
 
 concurrency:

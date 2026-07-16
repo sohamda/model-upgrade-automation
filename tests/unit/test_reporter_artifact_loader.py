@@ -9,13 +9,14 @@ from src.reporter.artifact_loader import load_reporter_run_input
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class ReporterArtifactLoaderTests(unittest.TestCase):
     def test_given_current_cli_test_run_when_loading_then_dataset_hash_mismatch_is_explicit(self) -> None:
         report_input = load_reporter_run_input(
-            REPO_ROOT,
-            REPO_ROOT / "artifacts" / "cli-test-run",
+            HERMETIC_REPO,
+            HERMETIC_REPO / "artifacts" / "cli-test-run",
         )
 
         self.assertEqual(report_input.run_id, "cli-test-run")

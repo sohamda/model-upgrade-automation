@@ -11,6 +11,7 @@ from src.orchestrator.pipeline import execute_dry_run
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class OrchestratorPipelineTests(unittest.TestCase):
@@ -19,7 +20,7 @@ class OrchestratorPipelineTests(unittest.TestCase):
 
     def test_given_default_config_when_executing_dry_run_then_emits_detector_and_recommender_payloads(self) -> None:
         # Act
-        result = execute_dry_run(REPO_ROOT, run_id="test-run")
+        result = execute_dry_run(REPO_ROOT, run_id="test-run", config_root=HERMETIC_REPO)
 
         # Assert
         payload = result.to_dict()

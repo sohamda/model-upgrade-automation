@@ -13,12 +13,13 @@ from src.shared.run_context import build_run_context
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class RecommenderServiceTests(unittest.TestCase):
     def test_given_matching_catalog_when_recommending_then_returns_stable_ranked_candidates(self) -> None:
         # Arrange
-        config = load_app_config(REPO_ROOT)
+        config = load_app_config(HERMETIC_REPO)
         run_context = build_run_context(config, run_id="test-run")
         target = RetiringTarget(
             model_id="gpt-4.1-mini",
@@ -45,7 +46,7 @@ class RecommenderServiceTests(unittest.TestCase):
 
     def test_given_no_matching_catalog_when_recommending_then_returns_warning(self) -> None:
         # Arrange
-        config = load_app_config(REPO_ROOT)
+        config = load_app_config(HERMETIC_REPO)
         run_context = build_run_context(config, run_id="test-run")
         target = RetiringTarget(
             model_id="gpt-4.1-mini",

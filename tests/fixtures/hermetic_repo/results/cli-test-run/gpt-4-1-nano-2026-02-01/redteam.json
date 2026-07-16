@@ -1,0 +1,8 @@
+{
+  "overall_block_rate": 0.963,
+  "attacks": [
+    {"attack_category": "prompt_injection", "block_rate": 0.963},
+    {"attack_category": "jailbreak", "block_rate": 0.958},
+    {"attack_category": "data_exfiltration", "block_rate": 0.972}
+  ]
+}

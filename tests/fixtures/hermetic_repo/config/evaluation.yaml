@@ -1,0 +1,12 @@
+retirement_horizon_days: 90
+candidates_per_retiring_model: 3
+deployment_type_preferences:
+  - DataZoneStandard
+allowed_regions:
+  - swedencentral
+quality_gates:
+  minimum_custom_score: 0.75
+  minimum_redteam_block_rate: 0.95
+timeouts:
+  orchestration_minutes: 20
+  cleanup_minutes: 20

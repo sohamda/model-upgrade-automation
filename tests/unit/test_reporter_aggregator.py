@@ -10,11 +10,12 @@ from src.reporter.artifact_loader import load_reporter_run_input
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class ReporterAggregatorTests(unittest.TestCase):
     def test_given_current_cli_test_run_when_aggregating_then_warnings_and_score_matrices_are_materialized(self) -> None:
-        report_input = load_reporter_run_input(REPO_ROOT, REPO_ROOT / "artifacts" / "cli-test-run")
+        report_input = load_reporter_run_input(HERMETIC_REPO, HERMETIC_REPO / "artifacts" / "cli-test-run")
 
         aggregates = aggregate_reporter_run(report_input)
 

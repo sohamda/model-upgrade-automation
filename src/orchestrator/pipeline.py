@@ -100,10 +100,11 @@ def execute_dry_run(
     fixture_path: Path | None = None,
     catalog_path: Path | None = None,
     run_id: str | None = None,
+    config_root: Path | None = None,
 ) -> DryRunOutput:
     """Execute the minimal non-Azure TG4 slice end-to-end."""
 
-    config: AppConfig = load_app_config(repo_root)
+    config: AppConfig = load_app_config(config_root or repo_root)
     run_context = build_run_context(config, run_id=run_id)
     source = FixtureRetirementSource(fixture_path) if fixture_path else build_default_fixture(repo_root)
     catalog = FixtureCandidateCatalog(catalog_path) if catalog_path else build_default_catalog(repo_root)

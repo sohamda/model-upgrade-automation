@@ -13,12 +13,13 @@ from src.shared.run_context import build_run_context
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class DetectorServiceTests(unittest.TestCase):
     def test_given_fixture_input_when_detecting_then_returns_configured_retiring_target(self) -> None:
         # Arrange
-        config = load_app_config(REPO_ROOT)
+        config = load_app_config(HERMETIC_REPO)
         run_context = build_run_context(config, run_id="test-run")
         source = FixtureRetirementSource(
             REPO_ROOT / "tests" / "fixtures" / "retirement_signals.yaml"
@@ -40,7 +41,7 @@ class DetectorServiceTests(unittest.TestCase):
 
     def test_given_unmatched_retirement_signal_when_detecting_then_emits_warning(self) -> None:
         # Arrange
-        config = load_app_config(REPO_ROOT)
+        config = load_app_config(HERMETIC_REPO)
         run_context = build_run_context(config, run_id="test-run")
         source = FixtureRetirementSource(
             REPO_ROOT / "tests" / "fixtures" / "retirement_signals.yaml"

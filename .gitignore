@@ -15,6 +15,10 @@ __pycache__/
 results/
 artifacts/
 
+# Committed hermetic test fixtures (must survive the results/ and artifacts/ ignores above)
+!tests/fixtures/
+!tests/fixtures/**
+
 # Local environment / secrets
 .env
 config/azure.env
@@ -23,3 +27,8 @@ config/azure.env
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Python build artifacts
+build/
+*.egg-info/
+
