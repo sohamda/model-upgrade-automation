@@ -12,6 +12,7 @@ from src.shared.errors import ContractError
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class EvaluatorInputBuilderTests(unittest.TestCase):

@@ -11,6 +11,7 @@ from src.evaluator.service import execute_local_evaluation
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class EvaluatorServiceTests(unittest.TestCase):
@@ -19,7 +20,7 @@ class EvaluatorServiceTests(unittest.TestCase):
 
     def test_given_staged_artifacts_and_dataset_when_executing_then_custom_and_redteam_outputs_are_materialized(self) -> None:
         # Arrange
-        artifact_root = REPO_ROOT / "artifacts" / "cli-test-run"
+        artifact_root = HERMETIC_REPO / "artifacts" / "cli-test-run"
         dataset_path = REPO_ROOT / "tests" / "fixtures" / "evaluator" / "dataset.sample.jsonl"
 
         # Act
