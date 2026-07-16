@@ -1,0 +1,11 @@
+retiring_models:
+  - model_id: gpt-4.1-mini
+    current_version: "2025-04-14"
+    retirement_date: "2026-08-15"
+    replacement_family: gpt-4.1
+    source: fixture
+  - model_id: ignored-model
+    current_version: "2024-01-01"
+    retirement_date: "2026-08-01"
+    replacement_family: ignored-family
+    source: fixture

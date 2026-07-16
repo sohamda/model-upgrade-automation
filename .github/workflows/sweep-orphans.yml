@@ -1,0 +1,173 @@
+name: Sweep Orphans
+
+on:
+  schedule:
+    - cron: '30 5 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List stale owned resources without deleting them'
+        required: false
+        default: true
+        type: boolean
+      retention_hours:
+        description: 'Age threshold before a tagged ephemeral resource is considered stale'
+        required: false
+        default: '24'
+        type: string
+
+concurrency:
+  group: sweep-orphans-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  OWNERSHIP_TAG: model-upgrade-automation
+  AUTOMATION_SCOPE_TAG: ephemeral
+  MANAGED_BY_TAG: model-upgrade-automation
+  CLEANUP_TAG: ephemeral
+
+jobs:
+  sweep:
+    name: Sweep Tagged Ephemeral Resources
+    if: github.event_name != 'schedule' || vars.ENABLE_ORPHAN_SWEEP == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DRY_RUN: ${{ inputs.dry_run || 'true' }}
+      RETENTION_HOURS: ${{ inputs.retention_hours || '24' }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Validate TG3 local contracts
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check pyyaml
+          python scripts/validate_tg3_contracts.py
+
+      - name: Validate sweep configuration
+        shell: bash
+        run: |
+          missing=0
+          for key in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID RESOURCE_GROUP; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing required GitHub variable: ${key}"
+              missing=1
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Azure login with OIDC
+        uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sweep tagged resources
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          mkdir -p .artifacts
+          az resource list \
+            --resource-group "${RESOURCE_GROUP}" \
+            --tag "owner=${OWNERSHIP_TAG}" \
+            --output json > .artifacts/owned-resources.json
+
+          python - <<'PY'
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+          import json
+          import os
+
+          owned_path = Path('.artifacts/owned-resources.json')
+          resources = json.loads(owned_path.read_text(encoding='utf-8'))
+          retention_hours = int(os.environ['RETENTION_HOURS'])
+          dry_run = os.environ['DRY_RUN'].lower() == 'true'
+          now = datetime.now(timezone.utc)
+          cutoff = now - timedelta(hours=retention_hours)
+
+          stale = []
+          skipped = []
+          for resource in resources:
+              tags = resource.get('tags') or {}
+              if tags.get('owner') != os.environ['OWNERSHIP_TAG']:
+                  skipped.append((resource.get('id', ''), 'owner-mismatch'))
+                  continue
+              if tags.get('managedBy') != os.environ['MANAGED_BY_TAG']:
+                skipped.append((resource.get('id', ''), 'managedBy-mismatch'))
+                continue
+              scope_tag = tags.get('automation_scope') or tags.get('cleanup')
+              if scope_tag not in (os.environ['AUTOMATION_SCOPE_TAG'], os.environ['CLEANUP_TAG']):
+                skipped.append((resource.get('id', ''), 'scope-mismatch'))
+                  continue
+              created_at = tags.get('created_at_utc')
+              if not created_at:
+                  skipped.append((resource.get('id', ''), 'missing-created_at_utc'))
+                  continue
+              created = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+              if created > cutoff:
+                  skipped.append((resource.get('id', ''), 'below-retention-threshold'))
+                  continue
+              stale.append(resource)
+
+          Path('.artifacts/stale-resource-ids.txt').write_text(
+              '\n'.join(resource['id'] for resource in stale),
+              encoding='utf-8',
+          )
+
+          summary_lines = [
+              '# Sweep Summary',
+              '',
+              f'* Dry run: {dry_run}',
+              f'* Retention hours: {retention_hours}',
+              f'* Owned resources scanned: {len(resources)}',
+              f'* Stale resources matched: {len(stale)}',
+              f'* Resources skipped: {len(skipped)}',
+              '',
+              '## Stale resources',
+          ]
+          if stale:
+              for resource in stale:
+                  summary_lines.append(f"* {resource['id']}")
+          else:
+              summary_lines.append('* None')
+          summary_lines.extend(['', '## Skipped resources'])
+          if skipped:
+              for resource_id, reason in skipped[:50]:
+                  summary_lines.append(f'* {resource_id or "<unknown>"} — {reason}')
+          else:
+              summary_lines.append('* None')
+          Path('.artifacts/sweep-summary.md').write_text(
+              '\n'.join(summary_lines) + '\n',
+              encoding='utf-8',
+          )
+          PY
+
+          if [ "${DRY_RUN}" != "true" ] && [ -s .artifacts/stale-resource-ids.txt ]; then
+            while IFS= read -r resource_id; do
+              az resource delete --ids "${resource_id}"
+            done < .artifacts/stale-resource-ids.txt
+          else
+            echo "::notice::Dry-run enabled or no stale resources matched. No deletions performed."
+          fi
+
+      - name: Upload sweep summary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sweep-orphans-${{ github.run_id }}
+          path: .artifacts/*
+          if-no-files-found: error

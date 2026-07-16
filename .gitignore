@@ -1,0 +1,25 @@
+# APM dependencies
+apm_modules/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Ephemeral run outputs
+results/
+artifacts/
+
+# Local environment / secrets
+.env
+config/azure.env
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db

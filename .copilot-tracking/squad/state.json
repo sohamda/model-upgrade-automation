@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "squadsVersion": "1.0.0",
+    "repositoryPath": "c:\\Users\\sohadasgupta\\IdeaProjects\\hve-squad\\model-upgrade-automation",
+    "initializedAt": "2026-07-15T00:00:00Z",
+    "initMode": "standard",
+    "rosterId": "2026-07-15-init"
+  },
+  "roster": [
+    {
+      "role": "MVP Product/Tech Integrator",
+      "memberName": "Cartman"
+    },
+    {
+      "role": "Security/Identity + Governance Lead",
+      "memberName": "Kyle"
+    },
+    {
+      "role": "Platform Reliability + SRE Lead",
+      "memberName": "Stan"
+    },
+    {
+      "role": "DevOps + IaC Engineer",
+      "memberName": "Butters"
+    },
+    {
+      "role": "Python Delivery Lead (Core pipeline)",
+      "memberName": "Kenny"
+    },
+    {
+      "role": "Evaluation + Quality Engineer",
+      "memberName": "Wendy"
+    }
+  ],
+  "currentRun": {
+    "startedAt": "2026-07-15T00:00:00Z",
+    "phase": "task-execution",
+    "dispatchCount": 29,
+    "decisionCount": 13,
+    "estCostUsd": 1.0245,
+    "estCreditsTotal": 102.449
+  }
+}

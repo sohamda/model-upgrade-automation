@@ -1,0 +1,417 @@
+name: Detect and Evaluate
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run orchestration scaffolding only and skip Azure mutations'
+        required: false
+        default: true
+        type: boolean
+      candidate_limit:
+        description: 'Maximum candidates to evaluate per retiring model'
+        required: false
+        default: '3'
+        type: string
+      enable_auto_pr:
+        description: 'Allow draft remediation PR generation'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: detect-and-eval-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CORRELATION_VERSION: '1'
+  DEFAULT_RETIREMENT_HORIZON_DAYS: '90'
+  DEFAULT_DEPLOYMENT_TYPE: 'DataZoneStandard'
+  OWNERSHIP_TAG: model-upgrade-automation
+  AUTOMATION_SCOPE_TAG: ephemeral
+
+jobs:
+  preflight:
+    name: Bootstrap Run Context
+    if: github.event_name != 'schedule' || vars.ENABLE_SCHEDULED_EVALS == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      run_id: ${{ steps.bootstrap.outputs.run_id }}
+      dry_run: ${{ steps.bootstrap.outputs.dry_run }}
+      started_at_utc: ${{ steps.bootstrap.outputs.started_at_utc }}
+      trigger_type: ${{ steps.bootstrap.outputs.trigger_type }}
+      candidate_limit: ${{ steps.bootstrap.outputs.candidate_limit }}
+      auto_pr_enabled: ${{ steps.bootstrap.outputs.auto_pr_enabled }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap run context
+        id: bootstrap
+        shell: bash
+        env:
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_CANDIDATE_LIMIT: ${{ inputs.candidate_limit }}
+          INPUT_ENABLE_AUTO_PR: ${{ inputs.enable_auto_pr }}
+          ENABLE_AUTO_PR: ${{ vars.ENABLE_AUTO_PR }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          FOUNDRY_ACCOUNT_NAME: ${{ vars.FOUNDRY_ACCOUNT_NAME }}
+          FOUNDRY_PROJECT_NAME: ${{ vars.FOUNDRY_PROJECT_NAME }}
+          ACA_ENVIRONMENT_NAME: ${{ vars.ACA_ENVIRONMENT_NAME }}
+          ACA_JOB_NAME: ${{ vars.ACA_JOB_NAME }}
+          STORAGE_ACCOUNT_NAME: ${{ vars.STORAGE_ACCOUNT_NAME }}
+          KEY_VAULT_NAME: ${{ vars.KEY_VAULT_NAME }}
+          DEPLOYMENT_TYPE: ${{ vars.DEPLOYMENT_TYPE }}
+          ALLOWED_REGIONS: ${{ vars.ALLOWED_REGIONS }}
+          RETIREMENT_HORIZON_DAYS: ${{ vars.RETIREMENT_HORIZON_DAYS }}
+          AUTOMATION_OWNERSHIP_TAG: ${{ vars.AUTOMATION_OWNERSHIP_TAG }}
+          AUTOMATION_SCOPE_TAG: ${{ vars.AUTOMATION_SCOPE_TAG }}
+          MANAGED_BY_TAG: ${{ vars.MANAGED_BY_TAG }}
+          AUTOMATION_CLEANUP_TAG: ${{ vars.AUTOMATION_CLEANUP_TAG }}
+        run: |
+            python - <<'PY'
+            from datetime import datetime, timezone
+            from pathlib import Path
+            import json
+            import os
+            import sys
+            import yaml
+
+            repo = Path('.')
+            artifacts_dir = repo / '.artifacts'
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+            evaluation = yaml.safe_load((repo / 'config/evaluation.yaml').read_text(encoding='utf-8')) or {}
+            dry_run = os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch' and os.environ.get('INPUT_DRY_RUN', 'true').lower() == 'true'
+            run_id = f"mua-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}"
+            started_at = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            input_candidate_limit = (os.environ.get('INPUT_CANDIDATE_LIMIT') or '').strip()
+            candidate_limit = input_candidate_limit or str(evaluation.get('candidates_per_retiring_model', '3'))
+            deployment_type = (os.environ.get('DEPLOYMENT_TYPE') or '').strip() or str(
+              (evaluation.get('deployment_type_preferences') or [os.environ['DEFAULT_DEPLOYMENT_TYPE']])[0]
+            )
+
+            if os.environ.get('ALLOWED_REGIONS'):
+              allowed_regions = [item.strip() for item in os.environ['ALLOWED_REGIONS'].split(',') if item.strip()]
+            else:
+              allowed_regions = [str(item) for item in evaluation.get('allowed_regions', ['swedencentral'])]
+
+            retirement_horizon = (os.environ.get('RETIREMENT_HORIZON_DAYS') or '').strip() or str(
+              evaluation.get('retirement_horizon_days', os.environ['DEFAULT_RETIREMENT_HORIZON_DAYS'])
+            )
+            auto_pr_requested = os.environ.get('INPUT_ENABLE_AUTO_PR', 'false').lower() == 'true'
+            auto_pr_permitted = os.environ.get('ENABLE_AUTO_PR', 'false').lower() == 'true'
+            if auto_pr_requested and not auto_pr_permitted:
+              print('::error::enable_auto_pr was requested but repository variable ENABLE_AUTO_PR is not true.')
+              sys.exit(1)
+
+            def resolved_value(env_name: str) -> str:
+              value = (os.environ.get(env_name) or '').strip()
+              if value:
+                return value
+              if dry_run:
+                return 'tg2-contract-pending'
+              return ''
+
+            context = {
+              'run_id': run_id,
+              'dry_run': dry_run,
+              'trigger_type': os.environ['GITHUB_EVENT_NAME'],
+              'started_at_utc': started_at,
+              'github_repo': os.environ['GITHUB_REPOSITORY'],
+              'github_run_id': os.environ['GITHUB_RUN_ID'],
+              'azure_tenant_id': resolved_value('AZURE_TENANT_ID'),
+              'azure_subscription_id': resolved_value('AZURE_SUBSCRIPTION_ID'),
+              'resource_group': resolved_value('RESOURCE_GROUP'),
+              'foundry_account_name': resolved_value('FOUNDRY_ACCOUNT_NAME'),
+              'foundry_project_name': resolved_value('FOUNDRY_PROJECT_NAME'),
+              'aca_environment_name': resolved_value('ACA_ENVIRONMENT_NAME'),
+              'aca_job_name': resolved_value('ACA_JOB_NAME'),
+              'storage_account_name': resolved_value('STORAGE_ACCOUNT_NAME'),
+              'key_vault_name': resolved_value('KEY_VAULT_NAME'),
+              'deployment_type': deployment_type,
+              'allowed_regions': allowed_regions,
+              'retirement_horizon_days': int(retirement_horizon),
+              'dataset_sha256': 'bootstrap-pending',
+              'correlation_version': os.environ['CORRELATION_VERSION'],
+              'candidate_limit': int(candidate_limit),
+              'auto_pr_enabled': auto_pr_requested,
+              'ownership_tag': (os.environ.get('AUTOMATION_OWNERSHIP_TAG') or '').strip() or os.environ['OWNERSHIP_TAG'],
+              'automation_scope_tag': (os.environ.get('AUTOMATION_SCOPE_TAG') or '').strip() or os.environ['AUTOMATION_SCOPE_TAG'],
+              'managed_by_tag': (os.environ.get('MANAGED_BY_TAG') or '').strip() or os.environ['OWNERSHIP_TAG'],
+              'cleanup_tag': (os.environ.get('AUTOMATION_CLEANUP_TAG') or '').strip() or os.environ['AUTOMATION_SCOPE_TAG'],
+            }
+
+            required_keys = [
+              'run_id',
+              'trigger_type',
+              'started_at_utc',
+              'github_repo',
+              'github_run_id',
+              'azure_tenant_id',
+              'azure_subscription_id',
+              'resource_group',
+              'foundry_account_name',
+              'foundry_project_name',
+              'aca_environment_name',
+              'aca_job_name',
+              'storage_account_name',
+              'key_vault_name',
+              'deployment_type',
+              'allowed_regions',
+              'retirement_horizon_days',
+              'dataset_sha256',
+              'correlation_version',
+            ]
+            missing = [key for key in required_keys if context[key] in ('', [], None)]
+            if missing:
+              print('::error::Run context is missing required fields: ' + ', '.join(missing))
+              sys.exit(1)
+
+            env_lines = [
+              f'RUN_ID={context["run_id"]}',
+              f'DRY_RUN={str(context["dry_run"]).lower()}',
+              f'TRIGGER_TYPE={context["trigger_type"]}',
+              f'STARTED_AT_UTC={context["started_at_utc"]}',
+              f'GITHUB_REPO={context["github_repo"]}',
+              f'GITHUB_RUN_ID={context["github_run_id"]}',
+              f'AZURE_TENANT_ID={context["azure_tenant_id"]}',
+              f'AZURE_SUBSCRIPTION_ID={context["azure_subscription_id"]}',
+              f'RESOURCE_GROUP={context["resource_group"]}',
+              f'FOUNDRY_ACCOUNT_NAME={context["foundry_account_name"]}',
+              f'FOUNDRY_PROJECT_NAME={context["foundry_project_name"]}',
+              f'ACA_ENVIRONMENT_NAME={context["aca_environment_name"]}',
+              f'ACA_JOB_NAME={context["aca_job_name"]}',
+              f'STORAGE_ACCOUNT_NAME={context["storage_account_name"]}',
+              f'KEY_VAULT_NAME={context["key_vault_name"]}',
+              f'DEPLOYMENT_TYPE={context["deployment_type"]}',
+              f'ALLOWED_REGIONS={",".join(context["allowed_regions"])}',
+              f'RETIREMENT_HORIZON_DAYS={context["retirement_horizon_days"]}',
+              f'DATASET_SHA256={context["dataset_sha256"]}',
+              f'CORRELATION_VERSION={context["correlation_version"]}',
+              f'CANDIDATE_LIMIT={context["candidate_limit"]}',
+              f'AUTO_REMEDIATION_ENABLED={str(context["auto_pr_enabled"]).lower()}',
+              f'OWNERSHIP_TAG={context["ownership_tag"]}',
+              f'AUTOMATION_SCOPE_TAG={context["automation_scope_tag"]}',
+              f'MANAGED_BY_TAG={context["managed_by_tag"]}',
+              f'CLEANUP_TAG={context["cleanup_tag"]}',
+            ]
+            (artifacts_dir / 'run-context.env').write_text('\n'.join(env_lines) + '\n', encoding='utf-8')
+            (artifacts_dir / 'run-context.json').write_text(json.dumps(context, indent=2) + '\n', encoding='utf-8')
+
+            with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as handle:
+              handle.write(f'run_id={run_id}\n')
+              handle.write(f'dry_run={str(dry_run).lower()}\n')
+              handle.write(f'started_at_utc={started_at}\n')
+              handle.write(f'trigger_type={os.environ["GITHUB_EVENT_NAME"]}\n')
+              handle.write(f'candidate_limit={candidate_limit}\n')
+              handle.write(f'auto_pr_enabled={str(auto_pr_requested).lower()}\n')
+            PY
+
+      - name: Validate workflow prerequisites
+        shell: bash
+        env:
+          DRY_RUN: ${{ steps.bootstrap.outputs.dry_run }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+          FOUNDRY_ACCOUNT_NAME: ${{ vars.FOUNDRY_ACCOUNT_NAME }}
+          FOUNDRY_PROJECT_NAME: ${{ vars.FOUNDRY_PROJECT_NAME }}
+          ACA_ENVIRONMENT_NAME: ${{ vars.ACA_ENVIRONMENT_NAME }}
+          ACA_JOB_NAME: ${{ vars.ACA_JOB_NAME }}
+          STORAGE_ACCOUNT_NAME: ${{ vars.STORAGE_ACCOUNT_NAME }}
+          KEY_VAULT_NAME: ${{ vars.KEY_VAULT_NAME }}
+        run: |
+          test -f config/models.yaml
+          test -f config/evaluation.yaml
+          test -f config/recommender.yaml
+          if [ "${DRY_RUN}" = "false" ]; then
+            missing=0
+            for key in \
+              AZURE_CLIENT_ID \
+              AZURE_TENANT_ID \
+              AZURE_SUBSCRIPTION_ID \
+              RESOURCE_GROUP \
+              FOUNDRY_ACCOUNT_NAME \
+              FOUNDRY_PROJECT_NAME \
+              ACA_ENVIRONMENT_NAME \
+              ACA_JOB_NAME \
+              STORAGE_ACCOUNT_NAME \
+              KEY_VAULT_NAME; do
+              if [ -z "${!key}" ]; then
+                echo "::error::Missing required GitHub variable: ${key}"
+                missing=1
+              fi
+            done
+            if [ "${missing}" -ne 0 ]; then
+              exit 1
+            fi
+          fi
+
+      - name: Validate TG3 local contracts
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check pyyaml
+          python scripts/validate_tg3_contracts.py
+
+      - name: Upload run context artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: run-context-${{ steps.bootstrap.outputs.run_id }}
+          path: .artifacts/run-context.*
+          if-no-files-found: error
+
+  orchestrate:
+    name: Invoke and Poll Placeholder
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RUN_ID: ${{ needs.preflight.outputs.run_id }}
+      DRY_RUN: ${{ needs.preflight.outputs.dry_run }}
+      STARTED_AT_UTC: ${{ needs.preflight.outputs.started_at_utc }}
+      TRIGGER_TYPE: ${{ needs.preflight.outputs.trigger_type }}
+      CANDIDATE_LIMIT: ${{ needs.preflight.outputs.candidate_limit }}
+      AUTO_PR_ENABLED: ${{ needs.preflight.outputs.auto_pr_enabled }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+      FOUNDRY_ACCOUNT_NAME: ${{ vars.FOUNDRY_ACCOUNT_NAME }}
+      FOUNDRY_PROJECT_NAME: ${{ vars.FOUNDRY_PROJECT_NAME }}
+      ACA_ENVIRONMENT_NAME: ${{ vars.ACA_ENVIRONMENT_NAME }}
+      ACA_JOB_NAME: ${{ vars.ACA_JOB_NAME }}
+      STORAGE_ACCOUNT_NAME: ${{ vars.STORAGE_ACCOUNT_NAME }}
+      KEY_VAULT_NAME: ${{ vars.KEY_VAULT_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Azure login with OIDC
+        if: env.DRY_RUN == 'false'
+        uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Orchestrate foundation placeholder
+        shell: bash
+        timeout-minutes: 20
+        run: |
+          mkdir -p .artifacts
+          cat > .artifacts/orchestrator-summary.json <<EOF
+          {
+            "run_id": "${RUN_ID}",
+            "status": "placeholder-complete",
+            "dry_run": ${DRY_RUN},
+            "trigger_type": "${TRIGGER_TYPE}",
+            "started_at_utc": "${STARTED_AT_UTC}",
+            "candidate_limit": "${CANDIDATE_LIMIT}",
+            "auto_pr_enabled": ${AUTO_PR_ENABLED},
+            "notes": [
+              "TG3 foundation established.",
+              "TG4 will replace this placeholder with detector, recommender, and provisioner entrypoints.",
+              "TG5 will bind ACA job invocation and result retrieval to this orchestration contract."
+            ]
+          }
+          EOF
+
+          cat > .artifacts/teardown-plan.json <<EOF
+          {
+            "run_id": "${RUN_ID}",
+            "ownership_tag": "${OWNERSHIP_TAG}",
+            "automation_scope_tag": "${AUTOMATION_SCOPE_TAG}",
+            "teardown_required": false,
+            "fallback": "Run sweep-orphans.yml within 24 hours if a future non-dry-run execution leaves resources behind."
+          }
+          EOF
+
+          if [ "${DRY_RUN}" = "false" ]; then
+            az account show --output none
+            echo "::notice::Azure control plane authentication succeeded. Business orchestration remains intentionally deferred to TG4/TG5."
+          else
+            echo "::notice::Dry-run mode enabled. Azure mutation steps are intentionally skipped."
+          fi
+
+      - name: Upload orchestration artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: detect-and-eval-${{ env.RUN_ID }}
+          path: .artifacts/*.json
+          if-no-files-found: error
+
+  finalize:
+    name: Finalize and Cleanup Handoff
+    needs:
+      - preflight
+      - orchestrate
+    if: always() && needs.preflight.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RUN_ID: ${{ needs.preflight.outputs.run_id }}
+      DRY_RUN: ${{ needs.preflight.outputs.dry_run }}
+      AUTO_PR_ENABLED: ${{ needs.preflight.outputs.auto_pr_enabled }}
+      ORCHESTRATE_RESULT: ${{ needs.orchestrate.result }}
+    steps:
+      - name: Create finalize summary
+        shell: bash
+        run: |
+          mkdir -p .artifacts
+          if [ "${ORCHESTRATE_RESULT}" = "success" ]; then
+            NEEDS_SWEEP=false
+          elif [ "${DRY_RUN}" = "true" ]; then
+            NEEDS_SWEEP=false
+          else
+            NEEDS_SWEEP=true
+          fi
+
+          cat > .artifacts/finalize-summary.md <<EOF
+          ## Detect-and-Eval Finalize Summary
+
+          * Run ID: ${RUN_ID}
+          * Dry run: ${DRY_RUN}
+          * Auto remediation enabled: ${AUTO_PR_ENABLED}
+          * Orchestration result: ${ORCHESTRATE_RESULT}
+          * Cleanup posture: Placeholder finalize complete. Future non-dry-run teardown must either complete inline or be recovered by sweep-orphans.yml within 24 hours.
+          * Sweep required: ${NEEDS_SWEEP}
+          EOF
+
+          cat > .artifacts/cleanup-recovery.json <<EOF
+          {
+            "run_id": "${RUN_ID}",
+            "orchestrate_result": "${ORCHESTRATE_RESULT}",
+            "dry_run": ${DRY_RUN},
+            "needs_sweep": ${NEEDS_SWEEP},
+            "rollback_recommendation": "Revert to the last known good workflow commit before re-running non-dry-run execution.",
+            "recovery_action": "If teardown was skipped or failed, validate sweep-orphans.yml in dry-run mode and complete cleanup within 24 hours."
+          }
+          EOF
+
+      - name: Upload finalize summary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finalize-${{ env.RUN_ID }}
+          path: |
+            .artifacts/finalize-summary.md
+            .artifacts/cleanup-recovery.json
+          if-no-files-found: error

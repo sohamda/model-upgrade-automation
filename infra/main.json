@@ -1,0 +1,2169 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "15260866544737064945"
+    },
+    "name": "model-upgrade-automation-tg2-baseline",
+    "description": "Composes the TG2 infrastructure, identity, and governance baseline for private-networked Foundry evaluation workloads."
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resource group-scoped resources."
+      }
+    },
+    "workloadPrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "Short workload prefix used to construct resource names."
+      }
+    },
+    "environment": {
+      "type": "string",
+      "allowedValues": [
+        "dev",
+        "test",
+        "prod"
+      ],
+      "metadata": {
+        "description": "Deployment environment name."
+      }
+    },
+    "instance": {
+      "type": "string",
+      "defaultValue": "001",
+      "metadata": {
+        "description": "Instance suffix used to keep resource names unique within the environment."
+      }
+    },
+    "githubPrincipalObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "Object ID of the Microsoft Entra application or service principal used by GitHub Actions OIDC federation."
+      }
+    },
+    "githubRepository": {
+      "type": "string",
+      "metadata": {
+        "description": "The GitHub repository that is allowed to federate into Azure. Format: org/repo."
+      }
+    },
+    "githubBranchRef": {
+      "type": "string",
+      "defaultValue": "refs/heads/main",
+      "metadata": {
+        "description": "The GitHub branch ref that is allowed to federate into Azure. Example: refs/heads/main."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "workload": "[parameters('workloadPrefix')]",
+        "environment": "[parameters('environment')]",
+        "managedBy": "model-upgrade-automation",
+        "taskGroup": "tg2"
+      },
+      "metadata": {
+        "description": "Resource tags applied to all resources deployed by this baseline."
+      }
+    }
+  },
+  "variables": {
+    "resourceSuffix": "[format('{0}-{1}-{2}', parameters('workloadPrefix'), parameters('environment'), parameters('instance'))]",
+    "acaSubnetName": "snet-aca",
+    "privateEndpointSubnetName": "snet-pe",
+    "virtualNetworkName": "[format('vnet-{0}', variables('resourceSuffix'))]",
+    "storageAccountName": "[take(replace(format('st{0}{1}{2}', parameters('workloadPrefix'), parameters('environment'), parameters('instance')), '-', ''), 24)]",
+    "keyVaultName": "[format('kv-{0}', variables('resourceSuffix'))]",
+    "containerAppsEnvironmentName": "[format('acaenv-{0}', variables('resourceSuffix'))]",
+    "foundryAccountName": "[format('fnd-{0}', variables('resourceSuffix'))]",
+    "logAnalyticsWorkspaceName": "[format('log-{0}', variables('resourceSuffix'))]",
+    "appInsightsName": "[format('appi-{0}', variables('resourceSuffix'))]",
+    "requiredGovernanceTags": "[union(parameters('tags'), createObject('owner', 'model-upgrade-automation', 'cleanup', 'ephemeral'))]"
+  },
+  "resources": {
+    "networking": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "networking",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "virtualNetworkName": {
+            "value": "[variables('virtualNetworkName')]"
+          },
+          "acaSubnetName": {
+            "value": "[variables('acaSubnetName')]"
+          },
+          "privateEndpointSubnetName": {
+            "value": "[variables('privateEndpointSubnetName')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "2213622320104689445"
+            },
+            "name": "networking",
+            "description": "Deploys the private-network baseline for model-upgrade-automation, including the VNet, delegated subnets, and private DNS zones."
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the networking resources."
+              }
+            },
+            "virtualNetworkName": {
+              "type": "string",
+              "metadata": {
+                "description": "Virtual network name."
+              }
+            },
+            "acaSubnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "Delegated subnet for the internal Container Apps environment."
+              }
+            },
+            "privateEndpointSubnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "Subnet dedicated to private endpoints."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Resource tags applied to the networking resources."
+              }
+            }
+          },
+          "variables": {
+            "acaSubnetResourceId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('acaSubnetName'))]",
+            "privateEndpointSubnetResolvedResourceId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('privateEndpointSubnetName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2024-05-01",
+              "name": "[parameters('virtualNetworkName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "10.40.0.0/16"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "[parameters('acaSubnetName')]",
+                    "properties": {
+                      "addressPrefix": "10.40.0.0/24",
+                      "delegations": [
+                        {
+                          "name": "containerApps",
+                          "properties": {
+                            "serviceName": "Microsoft.App/environments"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "name": "[parameters('privateEndpointSubnetName')]",
+                    "properties": {
+                      "addressPrefix": "10.40.1.0/24",
+                      "privateEndpointNetworkPolicies": "Disabled"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2024-06-01",
+              "name": "privatelink.cognitiveservices.azure.com",
+              "location": "global",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2024-06-01",
+              "name": "[format('privatelink.blob.{0}', environment().suffixes.storage)]",
+              "location": "global",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2024-06-01",
+              "name": "[format('privatelink.table.{0}', environment().suffixes.storage)]",
+              "location": "global",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2024-06-01",
+              "name": "privatelink.vaultcore.azure.net",
+              "location": "global",
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/{1}', 'privatelink.cognitiveservices.azure.com', format('{0}-link', parameters('virtualNetworkName')))]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]",
+                "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/{1}', format('privatelink.blob.{0}', environment().suffixes.storage), format('{0}-link', parameters('virtualNetworkName')))]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/{1}', format('privatelink.table.{0}', environment().suffixes.storage), format('{0}-link', parameters('virtualNetworkName')))]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.table.{0}', environment().suffixes.storage))]",
+                "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-06-01",
+              "name": "[format('{0}/{1}', 'privatelink.vaultcore.azure.net', format('{0}-link', parameters('virtualNetworkName')))]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.vaultcore.azure.net')]",
+                "[resourceId('Microsoft.Network/virtualNetworks', parameters('virtualNetworkName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "acaSubnetResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "The resource ID of the delegated ACA subnet."
+              },
+              "value": "[variables('acaSubnetResourceId')]"
+            },
+            "privateEndpointSubnetResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "The resource ID of the private endpoint subnet."
+              },
+              "value": "[variables('privateEndpointSubnetResolvedResourceId')]"
+            },
+            "privateDnsZoneIds": {
+              "type": "object",
+              "metadata": {
+                "description": "Private DNS zones keyed by service contract name."
+              },
+              "value": {
+                "cognitiveServices": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.cognitiveservices.azure.com')]",
+                "blob": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.blob.{0}', environment().suffixes.storage))]",
+                "table": "[resourceId('Microsoft.Network/privateDnsZones', format('privatelink.table.{0}', environment().suffixes.storage))]",
+                "vault": "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.vaultcore.azure.net')]"
+              }
+            }
+          }
+        }
+      }
+    },
+    "monitoring": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "logAnalyticsWorkspaceName": {
+            "value": "[variables('logAnalyticsWorkspaceName')]"
+          },
+          "appInsightsName": {
+            "value": "[variables('appInsightsName')]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "14718923041344345205"
+            },
+            "name": "monitoring",
+            "description": "Deploys the Log Analytics workspace and Application Insights instance used by the TG2 baseline."
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for monitoring resources."
+              }
+            },
+            "logAnalyticsWorkspaceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Log Analytics workspace."
+              }
+            },
+            "appInsightsName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Application Insights component."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Resource tags applied to monitoring resources."
+              }
+            }
+          },
+          "resources": {
+            "logAnalyticsWorkspace": {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2023-09-01",
+              "name": "[parameters('logAnalyticsWorkspaceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 30
+              }
+            },
+            "appInsights": {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[parameters('appInsightsName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]",
+                "IngestionMode": "LogAnalytics",
+                "DisableLocalAuth": true,
+                "publicNetworkAccessForIngestion": "Disabled",
+                "publicNetworkAccessForQuery": "Disabled"
+              },
+              "dependsOn": [
+                "logAnalyticsWorkspace"
+              ]
+            }
+          },
+          "outputs": {
+            "logAnalyticsWorkspaceCustomerId": {
+              "type": "string",
+              "metadata": {
+                "description": "The Log Analytics workspace customer ID used by Container Apps."
+              },
+              "value": "[reference('logAnalyticsWorkspace').customerId]"
+            },
+            "logAnalyticsWorkspaceSharedKey": {
+              "type": "securestring",
+              "metadata": {
+                "description": "The Log Analytics shared key used by Container Apps environment provisioning."
+              },
+              "value": "[listKeys('logAnalyticsWorkspace', '2023-09-01').primarySharedKey]"
+            },
+            "appInsightsConnectionString": {
+              "type": "string",
+              "metadata": {
+                "description": "The Application Insights connection string for workflow/runtime configuration."
+              },
+              "value": "[reference('appInsights').ConnectionString]"
+            }
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "storageAccountName": {
+            "value": "[variables('storageAccountName')]"
+          },
+          "privateEndpointSubnetResourceId": {
+            "value": "[reference('networking').outputs.privateEndpointSubnetResourceId.value]"
+          },
+          "privateDnsZoneIds": {
+            "value": "[reference('networking').outputs.privateDnsZoneIds.value]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "2241726945947279386"
+            },
+            "name": "storage",
+            "description": "Deploys the private-only storage account used for Blob artifacts and Table skip-index history."
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the storage account."
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the storage account."
+              }
+            },
+            "privateEndpointSubnetResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the subnet that hosts private endpoints."
+              }
+            },
+            "privateDnsZoneIds": {
+              "type": "object",
+              "metadata": {
+                "description": "Private DNS zone resource IDs keyed by service contract name."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Resource tags applied to the storage resources."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2024-01-01",
+              "name": "[parameters('storageAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "publicNetworkAccess": "Disabled",
+                "allowBlobPublicAccess": false,
+                "minimumTlsVersion": "TLS1_2",
+                "supportsHttpsTrafficOnly": true,
+                "allowSharedKeyAccess": false
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-blob-pe', parameters('storageAccountName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetResourceId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "blob",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+                      "groupIds": [
+                        "blob"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-table-pe', parameters('storageAccountName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetResourceId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "table",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+                      "groupIds": [
+                        "table"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', format('{0}-blob-pe', parameters('storageAccountName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "blob",
+                    "properties": {
+                      "privateDnsZoneId": "[parameters('privateDnsZoneIds').blob]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-blob-pe', parameters('storageAccountName')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', format('{0}-table-pe', parameters('storageAccountName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "table",
+                    "properties": {
+                      "privateDnsZoneId": "[parameters('privateDnsZoneIds').table]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-table-pe', parameters('storageAccountName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "storageAccountResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the storage account."
+              },
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+            },
+            "storageServices": {
+              "type": "object",
+              "metadata": {
+                "description": "Storage services that support the TG1 data artifact contract."
+              },
+              "value": {
+                "blob": "[format('{0}.blob.{1}', parameters('storageAccountName'), environment().suffixes.storage)]",
+                "table": "[format('{0}.table.{1}', parameters('storageAccountName'), environment().suffixes.storage)]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "networking"
+      ]
+    },
+    "keyVault": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "keyVault",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "keyVaultName": {
+            "value": "[variables('keyVaultName')]"
+          },
+          "privateEndpointSubnetResourceId": {
+            "value": "[reference('networking').outputs.privateEndpointSubnetResourceId.value]"
+          },
+          "privateDnsZoneIds": {
+            "value": "[reference('networking').outputs.privateDnsZoneIds.value]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "15457270570606139085"
+            },
+            "name": "keyvault",
+            "description": "Deploys the private-only Key Vault used for optional notification and remediation secrets."
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Key Vault."
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Key Vault."
+              }
+            },
+            "privateEndpointSubnetResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the subnet that hosts private endpoints."
+              }
+            },
+            "privateDnsZoneIds": {
+              "type": "object",
+              "metadata": {
+                "description": "Private DNS zone resource IDs keyed by service contract name."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Resource tags applied to the Key Vault resources."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2023-07-01",
+              "name": "[parameters('keyVaultName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "tenantId": "[subscription().tenantId]",
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "enableRbacAuthorization": true,
+                "enabledForDeployment": false,
+                "enabledForTemplateDeployment": false,
+                "enabledForDiskEncryption": false,
+                "publicNetworkAccess": "Disabled",
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 90
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-pe', parameters('keyVaultName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetResourceId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "vault",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+                      "groupIds": [
+                        "vault"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', format('{0}-pe', parameters('keyVaultName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "vault",
+                    "properties": {
+                      "privateDnsZoneId": "[parameters('privateDnsZoneIds').vault]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pe', parameters('keyVaultName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "keyVaultResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Key Vault."
+              },
+              "value": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "networking"
+      ]
+    },
+    "foundry": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "foundry",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "foundryAccountName": {
+            "value": "[variables('foundryAccountName')]"
+          },
+          "privateEndpointSubnetResourceId": {
+            "value": "[reference('networking').outputs.privateEndpointSubnetResourceId.value]"
+          },
+          "privateDnsZoneIds": {
+            "value": "[reference('networking').outputs.privateDnsZoneIds.value]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "5803189843264401640"
+            },
+            "name": "foundry",
+            "description": "Deploys the Azure AI Foundry account baseline with private-only connectivity and a private endpoint contract for evaluator access."
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Foundry resources."
+              }
+            },
+            "foundryAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Azure AI Foundry account."
+              }
+            },
+            "privateEndpointSubnetResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the subnet that hosts private endpoints."
+              }
+            },
+            "privateDnsZoneIds": {
+              "type": "object",
+              "metadata": {
+                "description": "Private DNS zone resource IDs keyed by service contract name."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Resource tags applied to Foundry resources."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2024-10-01",
+              "name": "[parameters('foundryAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "AIServices",
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "customSubDomainName": "[parameters('foundryAccountName')]",
+                "publicNetworkAccess": "Disabled",
+                "disableLocalAuth": true,
+                "networkAcls": {
+                  "defaultAction": "Deny"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}-pe', parameters('foundryAccountName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('privateEndpointSubnetResourceId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "account",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]",
+                      "groupIds": [
+                        "account"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-05-01",
+              "name": "[format('{0}/{1}', format('{0}-pe', parameters('foundryAccountName')), 'default')]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "cognitive-services",
+                    "properties": {
+                      "privateDnsZoneId": "[parameters('privateDnsZoneIds').cognitiveServices]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', format('{0}-pe', parameters('foundryAccountName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "foundryAccountResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Azure AI Foundry account."
+              },
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('foundryAccountName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "networking"
+      ]
+    },
+    "containerApps": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "containerApps",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "containerAppsEnvironmentName": {
+            "value": "[variables('containerAppsEnvironmentName')]"
+          },
+          "infrastructureSubnetResourceId": {
+            "value": "[reference('networking').outputs.acaSubnetResourceId.value]"
+          },
+          "logAnalyticsWorkspaceCustomerId": {
+            "value": "[reference('monitoring').outputs.logAnalyticsWorkspaceCustomerId.value]"
+          },
+          "logAnalyticsWorkspaceSharedKey": {
+            "value": "[listOutputsWithSecureValues('monitoring', '2025-04-01').logAnalyticsWorkspaceSharedKey]"
+          },
+          "tags": {
+            "value": "[parameters('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "2724558122381462287"
+            },
+            "name": "container-apps",
+            "description": "Deploys the internal Container Apps environment that hosts the evaluator job definition and managed identity contract."
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region for the Container Apps resources."
+              }
+            },
+            "containerAppsEnvironmentName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Container Apps environment."
+              }
+            },
+            "infrastructureSubnetResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the delegated subnet used by the internal Container Apps environment."
+              }
+            },
+            "logAnalyticsWorkspaceCustomerId": {
+              "type": "string",
+              "metadata": {
+                "description": "Log Analytics workspace customer ID used to connect diagnostics."
+              }
+            },
+            "logAnalyticsWorkspaceSharedKey": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Log Analytics workspace shared key used to connect diagnostics."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "metadata": {
+                "description": "Resource tags applied to Container Apps resources."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.App/managedEnvironments",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('containerAppsEnvironmentName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "vnetConfiguration": {
+                  "infrastructureSubnetId": "[parameters('infrastructureSubnetResourceId')]",
+                  "internal": true
+                },
+                "appLogsConfiguration": {
+                  "destination": "log-analytics",
+                  "logAnalyticsConfiguration": {
+                    "customerId": "[parameters('logAnalyticsWorkspaceCustomerId')]",
+                    "sharedKey": "[parameters('logAnalyticsWorkspaceSharedKey')]"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.App/jobs",
+              "apiVersion": "2024-03-01",
+              "name": "aca-mua-eval",
+              "location": "[parameters('location')]",
+              "tags": "[union(parameters('tags'), createObject('owner', 'model-upgrade-automation', 'cleanup', 'ephemeral'))]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "environmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
+                "configuration": {
+                  "triggerType": "Manual",
+                  "replicaRetryLimit": 3,
+                  "replicaTimeout": 1800,
+                  "manualTriggerConfig": {
+                    "parallelism": 1,
+                    "replicaCompletionCount": 1
+                  }
+                },
+                "template": {
+                  "containers": [
+                    {
+                      "name": "evaluator",
+                      "image": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+                      "resources": {
+                        "cpu": "[json('0.5')]",
+                        "memory": "1Gi"
+                      }
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "containerAppsEnvironmentResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Container Apps environment."
+              },
+              "value": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
+            },
+            "managedIdentityPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the evaluator job managed identity."
+              },
+              "value": "[reference(resourceId('Microsoft.App/jobs', 'aca-mua-eval'), '2024-03-01', 'full').identity.principalId]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "monitoring",
+        "networking"
+      ]
+    },
+    "rbac": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "rbac",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "githubPrincipalObjectId": {
+            "value": "[parameters('githubPrincipalObjectId')]"
+          },
+          "containerAppsManagedIdentityPrincipalId": {
+            "value": "[reference('containerApps').outputs.managedIdentityPrincipalId.value]"
+          },
+          "foundryAccountResourceId": {
+            "value": "[reference('foundry').outputs.foundryAccountResourceId.value]"
+          },
+          "storageAccountResourceId": {
+            "value": "[reference('storage').outputs.storageAccountResourceId.value]"
+          },
+          "keyVaultResourceId": {
+            "value": "[reference('keyVault').outputs.keyVaultResourceId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "3086765653025774463"
+            },
+            "name": "rbac",
+            "description": "Assigns least-privilege roles to the GitHub OIDC principal and the Container Apps managed identity."
+          },
+          "parameters": {
+            "githubPrincipalObjectId": {
+              "type": "string",
+              "metadata": {
+                "description": "Object ID of the Microsoft Entra application or service principal used by GitHub Actions OIDC federation."
+              }
+            },
+            "containerAppsManagedIdentityPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the Container Apps managed identity."
+              }
+            },
+            "foundryAccountResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Azure AI Foundry account."
+              }
+            },
+            "storageAccountResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the storage account."
+              }
+            },
+            "keyVaultResourceId": {
+              "type": "string",
+              "metadata": {
+                "description": "Resource ID of the Key Vault."
+              }
+            }
+          },
+          "variables": {
+            "contributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+            "storageBlobDataContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]",
+            "storageTableDataContributorRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3')]",
+            "keyVaultSecretsUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+            "cognitiveServicesUserRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')]",
+            "monitoringMetricsPublisherRoleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '3913510d-42f4-4e42-8a64-420c390055eb')]",
+            "foundryAccountName": "[last(split(parameters('foundryAccountResourceId'), '/'))]",
+            "storageAccountName": "[last(split(parameters('storageAccountResourceId'), '/'))]",
+            "keyVaultName": "[last(split(parameters('keyVaultResourceId'), '/'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('githubPrincipalObjectId'), variables('contributorRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('githubPrincipalObjectId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[variables('contributorRoleDefinitionId')]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', variables('foundryAccountName'))]",
+              "name": "[guid(parameters('foundryAccountResourceId'), parameters('containerAppsManagedIdentityPrincipalId'), variables('cognitiveServicesUserRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('containerAppsManagedIdentityPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[variables('cognitiveServicesUserRoleDefinitionId')]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.Storage/storageAccounts/{0}', variables('storageAccountName'))]",
+              "name": "[guid(parameters('storageAccountResourceId'), parameters('containerAppsManagedIdentityPrincipalId'), variables('storageBlobDataContributorRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('containerAppsManagedIdentityPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[variables('storageBlobDataContributorRoleDefinitionId')]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.Storage/storageAccounts/{0}', variables('storageAccountName'))]",
+              "name": "[guid(format('{0}/table', parameters('storageAccountResourceId')), parameters('containerAppsManagedIdentityPrincipalId'), variables('storageTableDataContributorRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('containerAppsManagedIdentityPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[variables('storageTableDataContributorRoleDefinitionId')]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.KeyVault/vaults/{0}', variables('keyVaultName'))]",
+              "name": "[guid(parameters('keyVaultResourceId'), parameters('containerAppsManagedIdentityPrincipalId'), variables('keyVaultSecretsUserRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('containerAppsManagedIdentityPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[variables('keyVaultSecretsUserRoleDefinitionId')]"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('containerAppsManagedIdentityPrincipalId'), variables('monitoringMetricsPublisherRoleDefinitionId'))]",
+              "properties": {
+                "principalId": "[parameters('containerAppsManagedIdentityPrincipalId')]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[variables('monitoringMetricsPublisherRoleDefinitionId')]"
+              }
+            }
+          ],
+          "outputs": {
+            "roleAssignments": {
+              "type": "object",
+              "metadata": {
+                "description": "Role names assigned by the TG2 baseline."
+              },
+              "value": {
+                "githubPrincipal": [
+                  "Contributor (resource group scoped)"
+                ],
+                "containerAppsManagedIdentity": [
+                  "Cognitive Services User",
+                  "Storage Blob Data Contributor",
+                  "Storage Table Data Contributor",
+                  "Key Vault Secrets User",
+                  "Monitoring Metrics Publisher"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "containerApps",
+        "foundry",
+        "keyVault",
+        "storage"
+      ]
+    },
+    "governanceDefinitions": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "governance-definitions",
+      "subscriptionId": "[subscription().subscriptionId]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "requiredTags": {
+            "value": "[variables('requiredGovernanceTags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "10680641608764901658"
+            },
+            "name": "governance-definitions",
+            "description": "Defines the TG2 custom policy definitions for private-only services and required tags."
+          },
+          "parameters": {
+            "requiredTags": {
+              "type": "object",
+              "metadata": {
+                "description": "Tag names and expected values enforced by the TG2 baseline."
+              }
+            }
+          },
+          "variables": {
+            "foundryType": "Microsoft.CognitiveServices/accounts",
+            "storageType": "Microsoft.Storage/storageAccounts",
+            "keyVaultType": "Microsoft.KeyVault/vaults"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-enforce-foundry-private-only",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require private-only Azure AI Foundry",
+                "description": "Denies Azure AI Foundry accounts that enable public network access or local key-based auth.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "policyRule": {
+                  "if": {
+                    "allOf": [
+                      {
+                        "field": "type",
+                        "equals": "[variables('foundryType')]"
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "field": "Microsoft.CognitiveServices/accounts/publicNetworkAccess",
+                            "notEquals": "Disabled"
+                          },
+                          {
+                            "field": "Microsoft.CognitiveServices/accounts/disableLocalAuth",
+                            "notEquals": true
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-enforce-storage-private-only",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require private-only Storage",
+                "description": "Denies storage accounts that expose public network access, shared keys, or public blob access.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "policyRule": {
+                  "if": {
+                    "allOf": [
+                      {
+                        "field": "type",
+                        "equals": "[variables('storageType')]"
+                      },
+                      {
+                        "anyOf": [
+                          {
+                            "field": "Microsoft.Storage/storageAccounts/publicNetworkAccess",
+                            "notEquals": "Disabled"
+                          },
+                          {
+                            "field": "Microsoft.Storage/storageAccounts/allowBlobPublicAccess",
+                            "notEquals": false
+                          },
+                          {
+                            "field": "Microsoft.Storage/storageAccounts/allowSharedKeyAccess",
+                            "notEquals": false
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-enforce-keyvault-private-only",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require private-only Key Vault",
+                "description": "Denies Key Vaults that expose public network access.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "policyRule": {
+                  "if": {
+                    "allOf": [
+                      {
+                        "field": "type",
+                        "equals": "[variables('keyVaultType')]"
+                      },
+                      {
+                        "field": "Microsoft.KeyVault/vaults/publicNetworkAccess",
+                        "notEquals": "Disabled"
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-require-workload-tag",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require workload tag",
+                "description": "Requires the workload tag with the TG2 baseline value.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "parameters": {
+                  "expectedValue": {
+                    "type": "String",
+                    "defaultValue": "[string(parameters('requiredTags').workload)]"
+                  }
+                },
+                "policyRule": {
+                  "if": {
+                    "anyOf": [
+                      {
+                        "field": "tags['workload']",
+                        "exists": false
+                      },
+                      {
+                        "field": "tags['workload']",
+                        "notEquals": "[[parameters('expectedValue')]"
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-require-environment-tag",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require environment tag",
+                "description": "Requires the environment tag with the TG2 baseline value.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "parameters": {
+                  "expectedValue": {
+                    "type": "String",
+                    "defaultValue": "[string(parameters('requiredTags').environment)]"
+                  }
+                },
+                "policyRule": {
+                  "if": {
+                    "anyOf": [
+                      {
+                        "field": "tags['environment']",
+                        "exists": false
+                      },
+                      {
+                        "field": "tags['environment']",
+                        "notEquals": "[[parameters('expectedValue')]"
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-require-managedby-tag",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require managedBy tag",
+                "description": "Requires the managedBy tag with the TG2 baseline value.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "parameters": {
+                  "expectedValue": {
+                    "type": "String",
+                    "defaultValue": "[string(parameters('requiredTags').managedBy)]"
+                  }
+                },
+                "policyRule": {
+                  "if": {
+                    "anyOf": [
+                      {
+                        "field": "tags['managedBy']",
+                        "exists": false
+                      },
+                      {
+                        "field": "tags['managedBy']",
+                        "notEquals": "[[parameters('expectedValue')]"
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-require-taskgroup-tag",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require taskGroup tag",
+                "description": "Requires the taskGroup tag with the TG2 baseline value.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "parameters": {
+                  "expectedValue": {
+                    "type": "String",
+                    "defaultValue": "[string(parameters('requiredTags').taskGroup)]"
+                  }
+                },
+                "policyRule": {
+                  "if": {
+                    "anyOf": [
+                      {
+                        "field": "tags['taskGroup']",
+                        "exists": false
+                      },
+                      {
+                        "field": "tags['taskGroup']",
+                        "notEquals": "[[parameters('expectedValue')]"
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-require-owner-tag",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require owner tag",
+                "description": "Requires the owner tag used by the orphan sweep contract.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "parameters": {
+                  "expectedValue": {
+                    "type": "String",
+                    "defaultValue": "[string(parameters('requiredTags').owner)]"
+                  }
+                },
+                "policyRule": {
+                  "if": {
+                    "anyOf": [
+                      {
+                        "field": "tags['owner']",
+                        "exists": false
+                      },
+                      {
+                        "field": "tags['owner']",
+                        "notEquals": "[[parameters('expectedValue')]"
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyDefinitions",
+              "apiVersion": "2023-04-01",
+              "name": "mua-tg2-require-cleanup-tag",
+              "properties": {
+                "policyType": "Custom",
+                "mode": "Indexed",
+                "displayName": "TG2 Require cleanup tag",
+                "description": "Requires the cleanup tag used by ephemeral resource sweeps.",
+                "metadata": {
+                  "category": "model-upgrade-automation",
+                  "version": "1.0.0",
+                  "taskGroup": "tg2"
+                },
+                "parameters": {
+                  "expectedValue": {
+                    "type": "String",
+                    "defaultValue": "[string(parameters('requiredTags').cleanup)]"
+                  }
+                },
+                "policyRule": {
+                  "if": {
+                    "anyOf": [
+                      {
+                        "field": "tags['cleanup']",
+                        "exists": false
+                      },
+                      {
+                        "field": "tags['cleanup']",
+                        "notEquals": "[[parameters('expectedValue')]"
+                      }
+                    ]
+                  },
+                  "then": {
+                    "effect": "deny"
+                  }
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "policyDefinitionNames": {
+              "type": "object",
+              "metadata": {
+                "description": "Custom policy definition names created by the TG2 governance baseline."
+              },
+              "value": {
+                "foundryPrivateOnly": "mua-tg2-enforce-foundry-private-only",
+                "storagePrivateOnly": "mua-tg2-enforce-storage-private-only",
+                "keyVaultPrivateOnly": "mua-tg2-enforce-keyvault-private-only",
+                "workloadTag": "mua-tg2-require-workload-tag",
+                "environmentTag": "mua-tg2-require-environment-tag",
+                "managedByTag": "mua-tg2-require-managedby-tag",
+                "taskGroupTag": "mua-tg2-require-taskgroup-tag",
+                "ownerTag": "mua-tg2-require-owner-tag",
+                "cleanupTag": "mua-tg2-require-cleanup-tag"
+              }
+            },
+            "foundryPrivateOnlyPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-enforce-foundry-private-only')]"
+            },
+            "storagePrivateOnlyPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-enforce-storage-private-only')]"
+            },
+            "keyVaultPrivateOnlyPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-enforce-keyvault-private-only')]"
+            },
+            "workloadTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-require-workload-tag')]"
+            },
+            "environmentTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-require-environment-tag')]"
+            },
+            "managedByTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-require-managedby-tag')]"
+            },
+            "taskGroupTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-require-taskgroup-tag')]"
+            },
+            "ownerTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-require-owner-tag')]"
+            },
+            "cleanupTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition IDs consumed by the TG2 assignment bundle."
+              },
+              "value": "[subscriptionResourceId('Microsoft.Authorization/policyDefinitions', 'mua-tg2-require-cleanup-tag')]"
+            }
+          }
+        }
+      }
+    },
+    "governance": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "governance",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "foundryPrivateOnlyPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.foundryPrivateOnlyPolicyDefinitionId.value]"
+          },
+          "storagePrivateOnlyPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.storagePrivateOnlyPolicyDefinitionId.value]"
+          },
+          "keyVaultPrivateOnlyPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.keyVaultPrivateOnlyPolicyDefinitionId.value]"
+          },
+          "workloadTagPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.workloadTagPolicyDefinitionId.value]"
+          },
+          "environmentTagPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.environmentTagPolicyDefinitionId.value]"
+          },
+          "managedByTagPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.managedByTagPolicyDefinitionId.value]"
+          },
+          "taskGroupTagPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.taskGroupTagPolicyDefinitionId.value]"
+          },
+          "ownerTagPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.ownerTagPolicyDefinitionId.value]"
+          },
+          "cleanupTagPolicyDefinitionId": {
+            "value": "[reference('governanceDefinitions').outputs.cleanupTagPolicyDefinitionId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "14187709940425453830"
+            },
+            "name": "governance",
+            "description": "Assigns the TG2 governance guardrails at the target resource-group scope."
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region used for policy assignment metadata."
+              }
+            },
+            "foundryPrivateOnlyPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the Foundry private-only guardrail."
+              }
+            },
+            "storagePrivateOnlyPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the Storage private-only guardrail."
+              }
+            },
+            "keyVaultPrivateOnlyPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the Key Vault private-only guardrail."
+              }
+            },
+            "workloadTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the workload tag requirement."
+              }
+            },
+            "environmentTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the environment tag requirement."
+              }
+            },
+            "managedByTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the managedBy tag requirement."
+              }
+            },
+            "taskGroupTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the taskGroup tag requirement."
+              }
+            },
+            "ownerTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the owner tag requirement."
+              }
+            },
+            "cleanupTagPolicyDefinitionId": {
+              "type": "string",
+              "metadata": {
+                "description": "Policy definition ID for the cleanup tag requirement."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-foundry-private-only",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 Foundry private-only guardrail",
+                "description": "Applies the TG2 private-only guardrail for Azure AI Foundry.",
+                "policyDefinitionId": "[parameters('foundryPrivateOnlyPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-storage-private-only",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 Storage private-only guardrail",
+                "description": "Applies the TG2 private-only guardrail for Storage.",
+                "policyDefinitionId": "[parameters('storagePrivateOnlyPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-keyvault-private-only",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 Key Vault private-only guardrail",
+                "description": "Applies the TG2 private-only guardrail for Key Vault.",
+                "policyDefinitionId": "[parameters('keyVaultPrivateOnlyPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-require-workload-tag",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 workload tag requirement",
+                "description": "Requires the workload tag for TG2-managed resources.",
+                "policyDefinitionId": "[parameters('workloadTagPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-require-environment-tag",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 environment tag requirement",
+                "description": "Requires the environment tag for TG2-managed resources.",
+                "policyDefinitionId": "[parameters('environmentTagPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-require-managedby-tag",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 managedBy tag requirement",
+                "description": "Requires the managedBy tag for TG2-managed resources.",
+                "policyDefinitionId": "[parameters('managedByTagPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-require-taskgroup-tag",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 taskGroup tag requirement",
+                "description": "Requires the taskGroup tag for TG2-managed resources.",
+                "policyDefinitionId": "[parameters('taskGroupTagPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-require-owner-tag",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 owner tag requirement",
+                "description": "Requires the owner tag for ephemeral-resource ownership tracking.",
+                "policyDefinitionId": "[parameters('ownerTagPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/policyAssignments",
+              "apiVersion": "2024-04-01",
+              "name": "mua-tg2-require-cleanup-tag",
+              "location": "[parameters('location')]",
+              "identity": {
+                "type": "None"
+              },
+              "properties": {
+                "displayName": "TG2 cleanup tag requirement",
+                "description": "Requires the cleanup tag for ephemeral-resource sweep contracts.",
+                "policyDefinitionId": "[parameters('cleanupTagPolicyDefinitionId')]",
+                "enforcementMode": "Default"
+              }
+            }
+          ],
+          "outputs": {
+            "policyAssignmentNames": {
+              "type": "object",
+              "metadata": {
+                "description": "Policy assignment names that TG3 must validate before enabling live delivery runs."
+              },
+              "value": {
+                "foundryPrivateOnly": "mua-tg2-foundry-private-only",
+                "storagePrivateOnly": "mua-tg2-storage-private-only",
+                "keyVaultPrivateOnly": "mua-tg2-keyvault-private-only",
+                "workloadTag": "mua-tg2-require-workload-tag",
+                "environmentTag": "mua-tg2-require-environment-tag",
+                "managedByTag": "mua-tg2-require-managedby-tag",
+                "taskGroupTag": "mua-tg2-require-taskgroup-tag",
+                "ownerTag": "mua-tg2-require-owner-tag",
+                "cleanupTag": "mua-tg2-require-cleanup-tag"
+              }
+            },
+            "policyDefinitionNames": {
+              "type": "object",
+              "metadata": {
+                "description": "Policy definition names referenced by the TG2 assignment bundle."
+              },
+              "value": {
+                "foundryPrivateOnly": "[last(split(parameters('foundryPrivateOnlyPolicyDefinitionId'), '/'))]",
+                "storagePrivateOnly": "[last(split(parameters('storagePrivateOnlyPolicyDefinitionId'), '/'))]",
+                "keyVaultPrivateOnly": "[last(split(parameters('keyVaultPrivateOnlyPolicyDefinitionId'), '/'))]",
+                "workloadTag": "[last(split(parameters('workloadTagPolicyDefinitionId'), '/'))]",
+                "environmentTag": "[last(split(parameters('environmentTagPolicyDefinitionId'), '/'))]",
+                "managedByTag": "[last(split(parameters('managedByTagPolicyDefinitionId'), '/'))]",
+                "taskGroupTag": "[last(split(parameters('taskGroupTagPolicyDefinitionId'), '/'))]",
+                "ownerTag": "[last(split(parameters('ownerTagPolicyDefinitionId'), '/'))]",
+                "cleanupTag": "[last(split(parameters('cleanupTagPolicyDefinitionId'), '/'))]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "governanceDefinitions"
+      ]
+    }
+  },
+  "outputs": {
+    "resourceNameMap": {
+      "type": "object",
+      "metadata": {
+        "description": "Resource name map that TG3 uses to hydrate RunContext and workflow environment variables."
+      },
+      "value": {
+        "virtualNetworkName": "[variables('virtualNetworkName')]",
+        "acaSubnetName": "[variables('acaSubnetName')]",
+        "privateEndpointSubnetName": "[variables('privateEndpointSubnetName')]",
+        "storageAccountName": "[variables('storageAccountName')]",
+        "keyVaultName": "[variables('keyVaultName')]",
+        "containerAppsEnvironmentName": "[variables('containerAppsEnvironmentName')]",
+        "foundryAccountName": "[variables('foundryAccountName')]",
+        "appInsightsName": "[variables('appInsightsName')]",
+        "logAnalyticsWorkspaceName": "[variables('logAnalyticsWorkspaceName')]"
+      }
+    },
+    "oidcContract": {
+      "type": "object",
+      "metadata": {
+        "description": "OIDC contract inputs for TG3 workflow authoring."
+      },
+      "value": {
+        "githubRepository": "[parameters('githubRepository')]",
+        "githubBranchRef": "[parameters('githubBranchRef')]",
+        "githubPrincipalObjectId": "[parameters('githubPrincipalObjectId')]",
+        "azureResourceGroup": "[resourceGroup().name]",
+        "azureSubscriptionId": "[subscription().subscriptionId]"
+      }
+    },
+    "privateDnsZones": {
+      "type": "object",
+      "metadata": {
+        "description": "Private DNS zones created for private-only data-plane access."
+      },
+      "value": "[reference('networking').outputs.privateDnsZoneIds.value]"
+    },
+    "networkContract": {
+      "type": "object",
+      "metadata": {
+        "description": "Network contract consumed by TG3 for private-only runtime validation."
+      },
+      "value": {
+        "virtualNetworkName": "[variables('virtualNetworkName')]",
+        "acaSubnetName": "[variables('acaSubnetName')]",
+        "privateEndpointSubnetName": "[variables('privateEndpointSubnetName')]",
+        "acaSubnetResourceId": "[reference('networking').outputs.acaSubnetResourceId.value]",
+        "privateEndpointSubnetResourceId": "[reference('networking').outputs.privateEndpointSubnetResourceId.value]",
+        "privateDnsZones": "[reference('networking').outputs.privateDnsZoneIds.value]",
+        "privateOnlyServices": [
+          "[variables('foundryAccountName')]",
+          "[variables('storageAccountName')]",
+          "[variables('keyVaultName')]"
+        ]
+      }
+    },
+    "governanceContract": {
+      "type": "object",
+      "metadata": {
+        "description": "Governance guardrails and validation targets that TG3 must preserve."
+      },
+      "value": {
+        "policyDefinitionNames": "[reference('governance').outputs.policyDefinitionNames.value]",
+        "policyAssignmentNames": "[reference('governance').outputs.policyAssignmentNames.value]",
+        "policyScopeResourceId": "[resourceGroup().id]",
+        "requiredTags": "[variables('requiredGovernanceTags')]",
+        "requiredServiceStates": {
+          "foundryPublicNetworkAccess": "Disabled",
+          "storagePublicNetworkAccess": "Disabled",
+          "keyVaultPublicNetworkAccess": "Disabled",
+          "storageAllowSharedKeyAccess": false,
+          "foundryDisableLocalAuth": true
+        }
+      }
+    },
+    "validationChecklist": {
+      "type": "object",
+      "metadata": {
+        "description": "TG3 validation checklist anchors derived from the TG2 baseline."
+      },
+      "value": {
+        "dns": [
+          "Resolve Foundry through privatelink.cognitiveservices.azure.com from the ACA subnet path.",
+          "[format('Resolve Blob through privatelink.blob.{0} from the ACA subnet path.', environment().suffixes.storage)]",
+          "[format('Resolve Table through privatelink.table.{0} from the ACA subnet path.', environment().suffixes.storage)]",
+          "Resolve Key Vault through privatelink.vaultcore.azure.net from the ACA subnet path."
+        ],
+        "identity": [
+          "GitHub Actions authenticates with OIDC only and uses no client secret.",
+          "The GitHub principal retains only resource-group-scoped Contributor access unless replaced by a narrower custom role.",
+          "The ACA managed identity can invoke Foundry and write Blob/Table history without storage keys or connection strings."
+        ],
+        "governance": [
+          "Tagged resources include workload, environment, managedBy, taskGroup, owner, and cleanup.",
+          "Public network access remains disabled for Foundry, Storage, and Key Vault.",
+          "Private endpoint guardrails are assigned at the deployment scope before TG3 enables live runs."
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "credential": {
+    "client_id": "local-client-id",
+    "mode": "oidc-placeholder",
+    "tenant_id": "local-tenant-id"
+  },
+  "detector": {
+    "parse_warnings": [],
+    "retiring_targets": [
+      {
+        "current_version": "2025-04-14",
+        "days_until_retirement": 30,
+        "model_id": "gpt-4.1-mini",
+        "region": "swedencentral",
+        "replacement_family": "gpt-4.1",
+        "retirement_date": "2026-08-15",
+        "source": "fixture",
+        "workload": "general_qa"
+      }
+    ]
+  },
+  "history": {
+    "manifests": [
+      {
+        "artifact_type": "detector-preview",
+        "content_sha256": "detector-sha",
+        "created_at_utc": "2026-07-15T19:10:21.555988+00:00",
+        "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+        "relative_path": "artifacts/cli-test-run/detector.json",
+        "run_id": "cli-test-run"
+      },
+      {
+        "artifact_type": "recommender-preview",
+        "content_sha256": "recommender-sha",
+        "created_at_utc": "2026-07-15T19:10:21.556032+00:00",
+        "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+        "relative_path": "artifacts/cli-test-run/recommender.json",
+        "run_id": "cli-test-run"
+      },
+      {
+        "artifact_type": "provisioner-preview",
+        "content_sha256": "provisioner-sha",
+        "created_at_utc": "2026-07-15T19:10:21.556073+00:00",
+        "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+        "relative_path": "artifacts/cli-test-run/provisioner.json",
+        "run_id": "cli-test-run"
+      }
+    ],
+    "skip_index_keys": [
+      {
+        "candidate_model_id": "gpt-4.1",
+        "candidate_version": "2026-01-12",
+        "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+        "model_id": "gpt-4.1-mini",
+        "version": "2025-04-14"
+      }
+    ]
+  },
+  "provisioner": {
+    "plans": [
+      {
+        "provision_requests": [
+          {
+            "candidate_model_id": "gpt-4.1",
+            "candidate_version": "2026-01-12",
+            "deployment_name": "tg4-gpt-4-1-mini-gpt-4-1-2026-01-12",
+            "deployment_type": "DataZoneStandard",
+            "idempotency_key": "request-key",
+            "region": "swedencentral",
+            "retiring_model_id": "gpt-4.1-mini",
+            "retiring_model_version": "2025-04-14",
+            "run_id": "cli-test-run",
+            "tags": {
+              "taskGroup": "tg4"
+            }
+          }
+        ],
+        "retiring_target": {
+          "current_version": "2025-04-14",
+          "days_until_retirement": 30,
+          "model_id": "gpt-4.1-mini",
+          "region": "swedencentral",
+          "replacement_family": "gpt-4.1",
+          "retirement_date": "2026-08-15",
+          "source": "fixture",
+          "workload": "general_qa"
+        },
+        "teardown_plans": [
+          {
+            "deployment_name": "tg4-gpt-4-1-mini-gpt-4-1-2026-01-12",
+            "idempotency_key": "request-key",
+            "reason": "ephemeral-candidate-validation",
+            "region": "swedencentral",
+            "resource_group": "local-rg"
+          }
+        ]
+      }
+    ]
+  },
+  "recommender": {
+    "recommendations": [
+      {
+        "parse_warnings": [],
+        "ranked_candidates": [
+          {
+            "candidate": {
+              "deployment_types": [
+                "DataZoneStandard"
+              ],
+              "model_id": "gpt-4.1",
+              "region": "swedencentral",
+              "version": "2026-01-12"
+            },
+            "rationale": [
+              "quality=0.95*0.50",
+              "safety=0.94*0.30",
+              "cost=0.72*0.20"
+            ],
+            "score": 0.901
+          }
+        ],
+        "retiring_target": {
+          "current_version": "2025-04-14",
+          "days_until_retirement": 30,
+          "model_id": "gpt-4.1-mini",
+          "region": "swedencentral",
+          "replacement_family": "gpt-4.1",
+          "retirement_date": "2026-08-15",
+          "source": "fixture",
+          "workload": "general_qa"
+        }
+      }
+    ]
+  },
+  "run_context": {
+    "aca_environment_name": "local-aca-env",
+    "aca_job_name": "local-aca-job",
+    "allowed_regions": [
+      "swedencentral"
+    ],
+    "azure_subscription_id": "local-subscription-id",
+    "azure_tenant_id": "local-tenant-id",
+    "correlation_version": "tg4-slice-2",
+    "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+    "deployment_type": "DataZoneStandard",
+    "foundry_account_name": "local-foundry-account",
+    "foundry_project_name": "local-foundry-project",
+    "github_repo": "model-upgrade-automation",
+    "github_run_id": "local",
+    "key_vault_name": "local-kv",
+    "resource_group": "local-rg",
+    "retirement_horizon_days": 90,
+    "run_id": "cli-test-run",
+    "started_at_utc": "2026-07-15T19:10:21.551246+00:00",
+    "storage_account_name": "localstorageacct",
+    "trigger_type": "workflow_dispatch"
+  }
+}

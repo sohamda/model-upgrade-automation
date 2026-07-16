@@ -1,0 +1,5 @@
+watch_list:
+  - model_id: gpt-4.1
+    current_version: '2025-04-14'
+    region: swedencentral
+    workload: general_qa

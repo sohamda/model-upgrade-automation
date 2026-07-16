@@ -1,0 +1,49 @@
+candidates:
+  - model_id: gpt-4.1
+    version: "2026-01-12"
+    region: swedencentral
+    deployment_types:
+      - DataZoneStandard
+    workloads:
+      - general_qa
+    replacement_families:
+      - gpt-4.1
+    quality_score: 0.95
+    safety_score: 0.94
+    cost_score: 0.72
+  - model_id: gpt-4.1-nano
+    version: "2026-02-01"
+    region: swedencentral
+    deployment_types:
+      - DataZoneStandard
+    workloads:
+      - general_qa
+    replacement_families:
+      - gpt-4.1
+    quality_score: 0.78
+    safety_score: 0.88
+    cost_score: 0.93
+  - model_id: gpt-4.1
+    version: "2026-01-12"
+    region: eastus
+    deployment_types:
+      - DataZoneStandard
+    workloads:
+      - general_qa
+    replacement_families:
+      - gpt-4.1
+    quality_score: 0.99
+    safety_score: 0.99
+    cost_score: 0.99
+  - model_id: gpt-4.1-mini
+    version: "2026-01-12"
+    region: swedencentral
+    deployment_types:
+      - ProvisionedManaged
+    workloads:
+      - general_qa
+    replacement_families:
+      - gpt-4.1
+    quality_score: 0.99
+    safety_score: 0.99
+    cost_score: 0.99

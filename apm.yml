@@ -1,0 +1,10 @@
+name: model-upgrade-automation
+version: 1.0.0
+description: APM project for model-upgrade-automation
+author: sohamda
+dependencies:
+  apm:
+  - Peter-N91/hve-squad#v0.9.5
+  mcp: []
+includes: auto
+scripts: {}

@@ -1,0 +1,37 @@
+{
+  "manifests": [
+    {
+      "artifact_type": "detector-preview",
+      "content_sha256": "detector-sha",
+      "created_at_utc": "2026-07-15T19:10:21.555988+00:00",
+      "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+      "relative_path": "artifacts/cli-test-run/detector.json",
+      "run_id": "cli-test-run"
+    },
+    {
+      "artifact_type": "recommender-preview",
+      "content_sha256": "recommender-sha",
+      "created_at_utc": "2026-07-15T19:10:21.556032+00:00",
+      "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+      "relative_path": "artifacts/cli-test-run/recommender.json",
+      "run_id": "cli-test-run"
+    },
+    {
+      "artifact_type": "provisioner-preview",
+      "content_sha256": "provisioner-sha",
+      "created_at_utc": "2026-07-15T19:10:21.556073+00:00",
+      "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+      "relative_path": "artifacts/cli-test-run/provisioner.json",
+      "run_id": "cli-test-run"
+    }
+  ],
+  "skip_index_keys": [
+    {
+      "candidate_model_id": "gpt-4.1",
+      "candidate_version": "2026-01-12",
+      "dataset_sha256": "435204ce99306666c9ef05db27ac32076b8d32a5f43198e0e837ec6dfadfd0c6",
+      "model_id": "gpt-4.1-mini",
+      "version": "2025-04-14"
+    }
+  ]
+}

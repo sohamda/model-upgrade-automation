@@ -1,0 +1,126 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "2724558122381462287"
+    },
+    "name": "container-apps",
+    "description": "Deploys the internal Container Apps environment that hosts the evaluator job definition and managed identity contract."
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure region for the Container Apps resources."
+      }
+    },
+    "containerAppsEnvironmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Container Apps environment."
+      }
+    },
+    "infrastructureSubnetResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the delegated subnet used by the internal Container Apps environment."
+      }
+    },
+    "logAnalyticsWorkspaceCustomerId": {
+      "type": "string",
+      "metadata": {
+        "description": "Log Analytics workspace customer ID used to connect diagnostics."
+      }
+    },
+    "logAnalyticsWorkspaceSharedKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Log Analytics workspace shared key used to connect diagnostics."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "metadata": {
+        "description": "Resource tags applied to Container Apps resources."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('containerAppsEnvironmentName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "vnetConfiguration": {
+          "infrastructureSubnetId": "[parameters('infrastructureSubnetResourceId')]",
+          "internal": true
+        },
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[parameters('logAnalyticsWorkspaceCustomerId')]",
+            "sharedKey": "[parameters('logAnalyticsWorkspaceSharedKey')]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/jobs",
+      "apiVersion": "2024-03-01",
+      "name": "aca-mua-eval",
+      "location": "[parameters('location')]",
+      "tags": "[union(parameters('tags'), createObject('owner', 'model-upgrade-automation', 'cleanup', 'ephemeral'))]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]",
+        "configuration": {
+          "triggerType": "Manual",
+          "replicaRetryLimit": 3,
+          "replicaTimeout": 1800,
+          "manualTriggerConfig": {
+            "parallelism": 1,
+            "replicaCompletionCount": 1
+          }
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "evaluator",
+              "image": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "containerAppsEnvironmentResourceId": {
+      "type": "string",
+      "metadata": {
+        "description": "Resource ID of the Container Apps environment."
+      },
+      "value": "[resourceId('Microsoft.App/managedEnvironments', parameters('containerAppsEnvironmentName'))]"
+    },
+    "managedIdentityPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "Principal ID of the evaluator job managed identity."
+      },
+      "value": "[reference(resourceId('Microsoft.App/jobs', 'aca-mua-eval'), '2024-03-01', 'full').identity.principalId]"
+    }
+  }
+}
