@@ -176,6 +176,22 @@ Validation complete: CLI entry point passes (`python -m src.orchestrator.cli`), 
 
 **Status**: ✓ Complete — TG4 first slice delivered, validated, and ready for review before proceeding to detector integration + full orchestrator.
 
+---
+
+## CI Quality: Hermetic Fixtures for Test Artifact Dependencies (2026-07-17T00:00:00Z)
+
+**Decision**: Switch tests with artifact dependencies from untracked local files to tracked hermetic fixtures under `tests/fixtures/hermetic_repo/`.
+
+**Rationale**: Tests in `test_evaluator_aca_job.py` and `test_evaluator_input_builder.py` were referencing untracked local artifacts (`artifacts/cli-test-run/dry_run_output.json`), causing CI failures on fresh clones. Switched to tracked hermetic fixtures to ensure tests are reproducible in any environment (local or CI). This improves test reliability and removes environment-specific dependencies.
+
+**Files Changed**:
+- `tests/unit/test_evaluator_aca_job.py` — 2 tests updated
+- `tests/unit/test_evaluator_input_builder.py` — 1 test updated
+
+**Validation**: All unit tests pass (23 OK) after fix applied.
+
+**Architectural Significance**: Low — operational quality improvement, not architectural.
+
 **Decision Ref**: `.copilot-tracking/squad/decisions.md#tg4-core-pipeline-first-execution-slice-start--shared-contracts--detector--minimal-orchestrator-2026-07-15t160000z`
 
 ---

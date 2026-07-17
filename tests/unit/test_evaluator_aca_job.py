@@ -12,15 +12,16 @@ from src.shared.errors import DependencyUnavailableError
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HERMETIC_REPO = REPO_ROOT / "tests" / "fixtures" / "hermetic_repo"
 
 
 class EvaluatorAcaJobTests(unittest.TestCase):
     def test_given_work_item_when_building_aca_request_then_contract_fields_are_preserved(self) -> None:
         # Arrange
-        evaluator_config = load_evaluator_config(REPO_ROOT)
+        evaluator_config = load_evaluator_config(HERMETIC_REPO)
         work_item = build_work_items_from_artifacts(
-            REPO_ROOT,
-            REPO_ROOT / "artifacts" / "cli-test-run",
+            HERMETIC_REPO,
+            HERMETIC_REPO / "artifacts" / "cli-test-run",
             evaluator_config,
             REPO_ROOT / "tests" / "fixtures" / "evaluator" / "dataset.sample.jsonl",
         )[0]
@@ -44,9 +45,9 @@ class EvaluatorAcaJobTests(unittest.TestCase):
             adapter.dispatch(
                 adapter.build_request(
                     build_work_items_from_artifacts(
-                        REPO_ROOT,
-                        REPO_ROOT / "artifacts" / "cli-test-run",
-                        load_evaluator_config(REPO_ROOT),
+                        HERMETIC_REPO,
+                        HERMETIC_REPO / "artifacts" / "cli-test-run",
+                        load_evaluator_config(HERMETIC_REPO),
                         REPO_ROOT / "tests" / "fixtures" / "evaluator" / "dataset.sample.jsonl",
                     )[0]
                 )

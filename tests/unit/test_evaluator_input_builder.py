@@ -21,13 +21,13 @@ class EvaluatorInputBuilderTests(unittest.TestCase):
 
     def test_given_tg4_staged_artifacts_when_building_work_items_then_candidate_inputs_are_deterministic(self) -> None:
         # Arrange
-        artifact_root = REPO_ROOT / "artifacts" / "cli-test-run"
+        artifact_root = HERMETIC_REPO / "artifacts" / "cli-test-run"
         dataset_path = REPO_ROOT / "tests" / "fixtures" / "evaluator" / "dataset.sample.jsonl"
-        evaluator_config = load_evaluator_config(REPO_ROOT)
+        evaluator_config = load_evaluator_config(HERMETIC_REPO)
 
         # Act
         work_items = build_work_items_from_artifacts(
-            REPO_ROOT,
+            HERMETIC_REPO,
             artifact_root,
             evaluator_config,
             dataset_path,
@@ -40,7 +40,7 @@ class EvaluatorInputBuilderTests(unittest.TestCase):
         self.assertEqual(work_items[0].deployment_ref.deployment_name, "tg4-gpt-4-1-mini-gpt-4-1-2026-01-12")
         self.assertEqual(work_items[0].dataset_sha256, work_items[0].run_context.dataset_sha256)
         self.assertEqual(
-            work_items[0].manifest_paths["provisioner-preview"].relative_to(REPO_ROOT).as_posix(),
+            work_items[0].manifest_paths["provisioner-preview"].relative_to(HERMETIC_REPO).as_posix(),
             "artifacts/cli-test-run/provisioner.json",
         )
         self.assertEqual(work_items[0].recommendation_rationale[0], "quality=0.95*0.50")

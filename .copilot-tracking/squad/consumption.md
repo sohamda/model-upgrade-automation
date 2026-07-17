@@ -9,10 +9,10 @@ Estimated cost per dispatched role. All figures are **estimated, not billed**.
 | MVP Product/Tech Integrator | claude-3-5-sonnet | default | 8,500 | 0 | 2,200 | $0.0585 | 5.85 |
 | Security/Identity + Governance Lead | claude-3-5-sonnet | default | 36,400 | 0 | 10,700 | $0.2697 | 26.97 |
 | DevOps + IaC Engineer | claude-3-5-sonnet | default | 26,500 | 0 | 7,600 | $0.1935 | 19.35 |
-| Python Delivery Lead (Core pipeline) | claude-3-5-sonnet | default | 44,200 | 0 | 13,800 | $0.3396 | 33.96 |
+| Python Delivery Lead (Core pipeline) | claude-3-haiku | tier-1 | 46,200 | 0 | 14,300 | $0.3432 | 34.32 |
 | Evaluation + Quality Engineer | claude-3-5-sonnet | default | 15,700 | 0 | 5,400 | $0.1281 | 12.81 |
 | Squad Scribe | claude-3-haiku | tier-1 | 18,600 | 0 | 5,650 | $0.03748 | 3.748 |
-| **Run Total** | | | **150,000** | **0** | **45,350** | **$1.0245** | **102.449** |
+| **Run Total** | | | **152,000** | **0** | **45,850** | **$1.0281** | **102.809** |
 
 ## Cost Comparison
 

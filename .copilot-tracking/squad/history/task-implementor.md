@@ -394,3 +394,57 @@ basis: estimated
 ```
 
 **Status**: ✓ Complete as far as locally possible
+
+---
+
+## Dispatch: CI Incident/Fix — Failed GitHub Action Tests (2026-07-17T00:00:00Z)
+
+**Request**: Investigate and fix failing GitHub Action for run #87703551451 (commit 2592c60). Three unit tests failing in tests/unit/test_evaluator_aca_job.py and tests/unit/test_evaluator_input_builder.py due to missing test artifacts in CI environment.
+
+**Context**: User reported failed GitHub Action run. Fresh CI checkout does not include untracked local runtime artifacts. Tests were referencing `artifacts/cli-test-run/dry_run_output.json` and related files that only exist in local development environment, not in git. CI environment = clean state without these artifacts.
+
+**Root Cause Analysis**:
+- Tests in `test_evaluator_aca_job.py` and `test_evaluator_input_builder.py` referenced untracked local artifacts at repo root (`artifacts/cli-test-run/dry_run_output.json`)
+- CI fresh checkout = clean repository state without these locally-generated artifacts
+- Tests failed with FileNotFoundError when attempting to load missing artifacts
+- Failure signature: 3 test failures in 2 test modules; full unit test suite (23 tests) blocked
+
+**Investigation Steps**:
+- Downloaded CI logs via gh CLI
+- Reproduced failure locally in clean repository clone
+- Identified test dependency on untracked artifacts
+- Audited test surface for other artifact references
+- Located tracked hermetic fixtures under `tests/fixtures/hermetic_repo/`
+
+**Solution Implemented**:
+- Switched failing tests to use tracked hermetic fixtures under `tests/fixtures/hermetic_repo/` instead of untracked artifacts
+- Fixtures are version-controlled and present in all CI environments
+- Applied fix consistently to both affected test modules
+
+**Files Changed**:
+- `tests/unit/test_evaluator_aca_job.py` — Updated 2 tests to use hermetic fixtures from `tests/fixtures/hermetic_repo/`
+- `tests/unit/test_evaluator_input_builder.py` — Updated 1 test to use hermetic fixtures from `tests/fixtures/hermetic_repo/`
+
+**Validation Completed**:
+- ✓ Targeted pytest run (4 affected tests) — All pass
+- ✓ `python -m unittest discover -s tests/unit` — Full suite pass (23 OK)
+- ✓ `python -m pytest tests/unit -q` — Full suite pass (23 passed)
+
+**Member Name**: Kenny
+
+**Consumption Block**:
+```
+model: claude-3-haiku
+model_tier: tier-1
+input_tokens: 2000
+cached_tokens: 0
+output_tokens: 500
+input_rate: 0.80
+cached_rate: 0.08
+output_rate: 4.00
+est_cost_usd: 0.0036
+est_credits: 0.36
+basis: tier-default
+```
+
+**Status**: ✓ Complete
