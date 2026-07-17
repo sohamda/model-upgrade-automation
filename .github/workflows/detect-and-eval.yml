@@ -210,6 +210,12 @@ jobs:
             (artifacts_dir / 'run-context.env').write_text('\n'.join(env_lines) + '\n', encoding='utf-8')
             (artifacts_dir / 'run-context.json').write_text(json.dumps(context, indent=2) + '\n', encoding='utf-8')
 
+            # Mirror context outputs into a non-hidden path for artifact upload robustness.
+            upload_dir = repo / 'artifacts'
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            (upload_dir / 'run-context.env').write_text('\n'.join(env_lines) + '\n', encoding='utf-8')
+            (upload_dir / 'run-context.json').write_text(json.dumps(context, indent=2) + '\n', encoding='utf-8')
+
             with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as handle:
               handle.write(f'run_id={run_id}\n')
               handle.write(f'dry_run={str(dry_run).lower()}\n')
@@ -270,7 +276,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: run-context-${{ steps.bootstrap.outputs.run_id }}
-          path: .artifacts/run-context.*
+          path: |
+            .artifacts/run-context.*
+            artifacts/run-context.*
+          include-hidden-files: true
           if-no-files-found: error
 
   orchestrate:
@@ -355,6 +364,7 @@ jobs:
         with:
           name: detect-and-eval-${{ env.RUN_ID }}
           path: .artifacts/*.json
+          include-hidden-files: true
           if-no-files-found: error
 
   finalize:
@@ -414,4 +424,5 @@ jobs:
           path: |
             .artifacts/finalize-summary.md
             .artifacts/cleanup-recovery.json
+          include-hidden-files: true
           if-no-files-found: error

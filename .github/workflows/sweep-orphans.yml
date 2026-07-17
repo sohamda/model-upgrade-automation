@@ -84,7 +84,7 @@ jobs:
           mkdir -p .artifacts
           az resource list \
             --resource-group "${RESOURCE_GROUP}" \
-            --tag "owner=${OWNERSHIP_TAG}" \
+            --query "[?tags.owner=='${OWNERSHIP_TAG}']" \
             --output json > .artifacts/owned-resources.json
 
           python - <<'PY'
@@ -113,7 +113,7 @@ jobs:
               scope_tag = tags.get('automation_scope') or tags.get('cleanup')
               if scope_tag not in (os.environ['AUTOMATION_SCOPE_TAG'], os.environ['CLEANUP_TAG']):
                 skipped.append((resource.get('id', ''), 'scope-mismatch'))
-                  continue
+                continue
               created_at = tags.get('created_at_utc')
               if not created_at:
                   skipped.append((resource.get('id', ''), 'missing-created_at_utc'))
@@ -170,4 +170,5 @@ jobs:
         with:
           name: sweep-orphans-${{ github.run_id }}
           path: .artifacts/*
+          include-hidden-files: true
           if-no-files-found: error
