@@ -85,6 +85,53 @@ Recommended order:
 3. Run Detect and Evaluate with dry_run=false.
 4. Run Sweep Orphans with dry_run=true.
 
+### 5) Run retiring-model alternatives flow locally
+
+Required environment variables for live Azure modes:
+
+1. AZURE_CLIENT_ID
+2. AZURE_TENANT_ID
+3. AZURE_SUBSCRIPTION_ID
+4. RESOURCE_GROUP
+5. FOUNDRY_ACCOUNT_NAME
+6. FOUNDRY_PROJECT_NAME
+
+Safe default (non-destructive, local fixtures):
+
+```bash
+python -m src.orchestrator.cli --repo-root . --run-id local-safe-001
+```
+
+Live Microsoft Learn catalog + explicit retiring model (still non-destructive by default):
+
+```bash
+python -m src.orchestrator.cli \
+	--repo-root . \
+	--run-id live-docs-001 \
+	--retiring-model gpt-4.1-mini \
+	--retiring-version 2025-04-14 \
+	--live-catalog \
+	--top-k 3
+```
+
+Discover retiring model from Azure Foundry deployments + provision + eval (opt-in):
+
+```bash
+python -m src.orchestrator.cli \
+	--repo-root . \
+	--run-id live-foundry-001 \
+	--discover-from-azure \
+	--live-catalog \
+	--provision-candidates \
+	--run-evals \
+	--top-k 3
+```
+
+Notes:
+
+1. Provisioning and evaluation are disabled unless `--provision-candidates` and `--run-evals` are explicitly set.
+2. If cloud ACA job execution is unavailable, evaluation falls back to deterministic local execution and marks status as `local-mvp-fallback` in the output payload.
+
 ### 4) Read results
 
 1. Workflow run page Summary tab now shows compact report output.

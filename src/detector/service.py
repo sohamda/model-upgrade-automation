@@ -29,6 +29,20 @@ def detect_retiring_targets(
     result = DetectorResult()
     for retiring_model in retirement_entries:
         watched = watch_index.get((retiring_model.model_id, retiring_model.current_version))
+        if retiring_model.source == "explicit-cli":
+            result.retiring_targets.append(
+                RetiringTarget(
+                    model_id=retiring_model.model_id,
+                    current_version=retiring_model.current_version,
+                    region=run_context.allowed_regions[0] if run_context.allowed_regions else "swedencentral",
+                    workload="general_qa",
+                    retirement_date=retiring_model.retirement_date,
+                    days_until_retirement=99999,
+                    source=retiring_model.source,
+                    replacement_family=retiring_model.replacement_family,
+                )
+            )
+            continue
         if not watched:
             result.parse_warnings.append(
                 WarningRecord(

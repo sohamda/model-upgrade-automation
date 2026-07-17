@@ -35,9 +35,9 @@
   "currentRun": {
     "startedAt": "2026-07-15T00:00:00Z",
     "phase": "task-execution",
-    "dispatchCount": 36,
-    "decisionCount": 21,
-    "estCostUsd": 1.12054,
-    "estCreditsTotal": 112.054
+    "dispatchCount": 41,
+    "decisionCount": 23,
+    "estCostUsd": 1.25194,
+    "estCreditsTotal": 125.194
   }
 }

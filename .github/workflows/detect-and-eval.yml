@@ -20,6 +20,26 @@ on:
         required: false
         default: false
         type: boolean
+      live_catalog:
+        description: 'Fetch retirement and catalog from live Microsoft Learn sources'
+        required: false
+        default: false
+        type: boolean
+      discover_from_azure:
+        description: 'Discover retiring deployments from Foundry account'
+        required: false
+        default: false
+        type: boolean
+      provision_candidates:
+        description: 'Allow provisioning candidate deployments (opt-in)'
+        required: false
+        default: false
+        type: boolean
+      run_evals:
+        description: 'Allow evaluator execution (opt-in)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: detect-and-eval-${{ github.ref }}
@@ -34,6 +54,7 @@ env:
   DEFAULT_DEPLOYMENT_TYPE: 'DataZoneStandard'
   OWNERSHIP_TAG: model-upgrade-automation
   AUTOMATION_SCOPE_TAG: ephemeral
+  ENABLE_SCHEDULED_PROVISIONING: ${{ vars.ENABLE_SCHEDULED_PROVISIONING || 'false' }}
 
 jobs:
   preflight:
@@ -325,19 +346,41 @@ jobs:
         timeout-minutes: 20
         run: |
           mkdir -p .artifacts
+          python -m pip install --disable-pip-version-check -e .
+
+          LIVE_ARGS=""
+          if [ "${{ inputs.live_catalog }}" = "true" ]; then
+            LIVE_ARGS="${LIVE_ARGS} --live-catalog"
+          fi
+          if [ "${{ inputs.discover_from_azure }}" = "true" ]; then
+            LIVE_ARGS="${LIVE_ARGS} --discover-from-azure"
+          fi
+          if [ "${{ inputs.provision_candidates }}" = "true" ]; then
+            LIVE_ARGS="${LIVE_ARGS} --provision-candidates"
+          fi
+          if [ "${{ inputs.run_evals }}" = "true" ]; then
+            LIVE_ARGS="${LIVE_ARGS} --run-evals"
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] && [ "${ENABLE_SCHEDULED_PROVISIONING}" != "true" ]; then
+            LIVE_ARGS="${LIVE_ARGS}"
+          fi
+
+          python -m src.orchestrator.cli --repo-root . --run-id "${RUN_ID}" --top-k "${CANDIDATE_LIMIT}" ${LIVE_ARGS} > .artifacts/orchestrator-live.json
+
           cat > .artifacts/orchestrator-summary.json <<EOF
           {
             "run_id": "${RUN_ID}",
-            "status": "placeholder-complete",
+            "status": "pipeline-complete",
             "dry_run": ${DRY_RUN},
             "trigger_type": "${TRIGGER_TYPE}",
             "started_at_utc": "${STARTED_AT_UTC}",
             "candidate_limit": "${CANDIDATE_LIMIT}",
             "auto_pr_enabled": ${AUTO_PR_ENABLED},
             "notes": [
-              "TG3 foundation established.",
-              "TG4 will replace this placeholder with detector, recommender, and provisioner entrypoints.",
-              "TG5 will bind ACA job invocation and result retrieval to this orchestration contract."
+              "TG4/TG5/TG6 live wiring invoked through orchestrator CLI.",
+              "Provisioning and evaluation remain opt-in by explicit flags.",
+              "Schedule mode remains non-destructive unless ENABLE_SCHEDULED_PROVISIONING=true."
             ]
           }
           EOF

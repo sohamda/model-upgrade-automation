@@ -61,6 +61,19 @@ class AppConfig:
     azure: AzureEnvironmentConfig
 
 
+@dataclass(slots=True)
+class RuntimeOptions:
+    """Runtime controls that can override default fixture-only behavior."""
+
+    retiring_model: str | None = None
+    retiring_version: str | None = None
+    discover_from_azure: bool = False
+    live_catalog: bool = False
+    provision_candidates: bool = False
+    run_evals: bool = False
+    top_k: int = 3
+
+
 def _read_yaml(path: Path) -> Any:
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle) or {}

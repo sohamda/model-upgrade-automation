@@ -81,6 +81,7 @@ class CandidateRank:
     candidate: Candidate
     score: float
     rationale: list[str] = field(default_factory=list)
+    rejection_reasons: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

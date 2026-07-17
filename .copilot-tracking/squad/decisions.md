@@ -54,6 +54,51 @@
 
 ---
 
+## Core Pipeline Live-Mode Transition: Fixture-Only → End-to-End with Foundry Discovery (2026-07-17T21:15:00Z)
+
+**Decision**: Accept core pipeline upgrade from fixture-only (local YAML + curated catalog) to end-to-end live mode: retiring model acceptance or Azure Foundry discovery, live catalog fetch, top-3 candidate provisioning, evaluation execution, and results delivery.
+
+**Rationale**: Prior design was MVP validation-only; stakeholder feedback rejected fixture guidance. Live mode required. Classification: Core pipeline / Detector / Recommender / Orchestrator. Resolved role: Python Delivery Lead (Kenny). Autonomy: confirm.
+
+**Implementation Summary**:
+
+*Changes to Detector / Recommender / Orchestrator*:
+- New CLI flags: `--retiring-model`, `--version`, `--discover-from-azure`, `--live-catalog`, `--provision-candidates`, `--run-evals`, `--top-k`
+- Live retirement source: accepts retiring model name or discovers from Azure Foundry via Microsoft.AI SDK
+- Live catalog source: fetches regional availability and metadata from Foundry model-catalog API
+- Provisioning execution path: provisions top-k candidates to Azure Container Apps (non-mutating by default; `--provision-candidates` enables)
+- Safety gates: evaluation requires provisioning (`--run-evals` only valid with `--provision-candidates`)
+- Orchestrator wiring: `detect-and-eval` GitHub Actions workflow now invokes Python CLI with live/provision/eval toggles and schedule guard variable
+
+*New Pipeline Files & CLI Tests*:
+- Live retirement source: `src/detector/live_retirement_source.py` (Foundry discovery)
+- Live catalog source: `src/recommender/live_catalog_source.py` (regional availability fetch)
+- Provisioning service: `src/provisioner/provisioning_service.py` (ACA deployment)
+- CLI flags extended: `src/orchestrator/cli.py`
+- Workflow wiring: `.github/workflows/detect-and-eval.yml` updated to invoke new flags
+- README usage: updated with live-mode examples and provisioning guardrails
+
+*Validation*:
+- ✓ Local pytest on new tests: 10 passed (all new flows validated in isolation)
+- ✓ CLI smoke test: `python -m src.orchestrator.cli --retiring-model gpt-4.1 --discover-from-azure --live-catalog --top-k 3` executes without error
+- ✓ Provisioning safety: provisioning is explicit opt-in; default is dry-run reporting
+
+*Known Limitation*:
+- MVP implementation includes local fallback for evaluation if cloud ACA provisioning or execution path is unavailable; production hardening and timeout recovery will follow in post-delivery phase.
+
+**Implementation Files Changed**:
+- CLI runtime flags: `src/orchestrator/cli.py`
+- Pipeline wiring: `.github/workflows/detect-and-eval.yml`, `src/orchestrator/pipeline.py`
+- New sources: `src/detector/live_retirement_source.py`, `src/recommender/live_catalog_source.py`, `src/provisioner/provisioning_service.py`
+- Workflow runner: `src/orchestrator/workflow_executor.py`
+- README usage: `README.md`
+
+**Architectural Significance**: High — core value proposition now includes live Foundry discovery and provisioning. This transition enables production end-to-end recommendation and evaluation workflow.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#core-pipeline-live-mode-transition-fixture-only--end-to-end-with-foundry-discovery-2026-07-17t211500z`
+
+---
+
 **Task Group Details**:
 
 ### Task Group 1: Architecture and MVP Integration
@@ -870,3 +915,45 @@ Gate B initially failed due to two pre-deployment prerequisites:
 **Architectural Significance**: No. TG9 is a release readiness checkpoint, not a system design decision.
 
 **Decision Ref**: `.copilot-tracking/squad/decisions.md#task-group-9-runbooks-and-release-readiness---closed-2026-07-17t230000z`
+
+---
+
+## gpt-4.1 Retirement Alternatives Analysis (2026-07-17T20:30:00Z)
+
+**Decision**: Dispatch Task Researcher to analyze repo capabilities for discovering model alternatives when gpt-4.1 retires.
+
+**Rationale**: Clarify current state of model retirement signal handling and candidate ranking automation in this repo. Confirm fixture-backed CLI design, identify missing automation (live Foundry schedule, regional availability), and provide path forward for integrating retirement-triggered alternative discovery into GitHub Actions workflows.
+
+**Resolved Role**: Python Delivery Lead (Core pipeline)
+
+**Dispatched Agent**: Task Researcher
+
+**Request**: Analyze repo design for gpt-4.1 retirement signaling, alternative ranking, and integration opportunities.
+
+**Findings**:
+
+- **Fixture-backed CLI**: Repo supports local CLI combining retirement-signal YAML + curated candidate-catalog YAML with ranking and cost analysis.
+  - Key command: `python -m src.orchestrator.cli --repo-root . --fixture <signal-yaml> --catalog <catalog-yaml> --run-id <id>`
+  - Main output: `artifacts/<run-id>/recommender.json`
+
+- **Missing automation**: No live Foundry retirement schedule or regional availability/catalog retrieval implemented yet. Current design assumes external curation of signal + catalog YAMLs.
+
+- **GitHub Actions gap**: Detect-and-eval workflow validates config/OIDC/artifact lifecycle only; does NOT invoke recommender to produce alternatives. Workflow and CLI are designed to be orthogonal.
+
+- **Required configuration**:
+  - `config/models.yaml` (watch model/deployment)
+  - `config/evaluation.yaml` (horizon/candidate count)
+  - `config/recommender.yaml` (filters/scoring weights)
+
+**Research Artifact**: `.copilot-tracking/research/2026-07-17/gpt-41-retirement-alternatives-research.md`
+
+**Next Steps**:
+1. Extend detect-and-eval workflow to call recommender when retirement signal detected.
+2. Add Foundry API integration to retrieve live retirement schedule and regional availability.
+3. Implement curated candidate catalog refresh from Foundry model catalog.
+
+**Architectural Significance**: No — analysis and research artifact only, no implementation committed.
+
+**Status**: Recorded ✓
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#gpt-41-retirement-alternatives-analysis-2026-07-17t203000z`

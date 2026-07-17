@@ -36,7 +36,7 @@ def recommend_candidates(
         )
     )
 
-    limit = run_context.allowed_regions and config.evaluation.candidates_per_retiring_model
+    limit = config.evaluation.candidates_per_retiring_model
     result = RecommenderResult(
         ranked_candidates=ranked[:limit],
         parse_warnings=[],

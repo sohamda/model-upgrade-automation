@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 import shutil
 import unittest
+from unittest.mock import patch
 
+from src.orchestrator.cli import create_parser, main
 from src.orchestrator.pipeline import execute_dry_run
 
 
@@ -87,6 +89,20 @@ class OrchestratorPipelineTests(unittest.TestCase):
                 "provisioner": payload["provisioner"],
                 "history": payload["history"],
                 "credential": payload["credential"],
+                "runtime": {
+                    "retiring_model": None,
+                    "retiring_version": None,
+                    "discover_from_azure": False,
+                    "live_catalog": False,
+                    "provision_candidates": False,
+                    "run_evals": False,
+                    "top_k": 3,
+                    "safety": {
+                        "provision_candidates": False,
+                        "run_evals": False,
+                        "mode": "dry-run",
+                    },
+                },
             },
         )
 
@@ -134,6 +150,49 @@ class OrchestratorPipelineTests(unittest.TestCase):
             summary_payload["provisioner"],
             json.loads((artifact_root / "provisioner.json").read_text(encoding="utf-8")),
         )
+
+
+class OrchestratorCliTests(unittest.TestCase):
+    def test_given_new_flags_when_parsing_then_runtime_options_are_supported(self) -> None:
+        # Arrange
+        parser = create_parser()
+
+        # Act
+        args = parser.parse_args(
+            [
+                "--retiring-model",
+                "gpt-4.1-mini",
+                "--retiring-version",
+                "2025-04-14",
+                "--discover-from-azure",
+                "--live-catalog",
+                "--provision-candidates",
+                "--run-evals",
+                "--top-k",
+                "2",
+            ]
+        )
+
+        # Assert
+        self.assertEqual(args.retiring_model, "gpt-4.1-mini")
+        self.assertEqual(args.retiring_version, "2025-04-14")
+        self.assertTrue(args.discover_from_azure)
+        self.assertTrue(args.live_catalog)
+        self.assertTrue(args.provision_candidates)
+        self.assertTrue(args.run_evals)
+        self.assertEqual(args.top_k, 2)
+
+    @patch("src.orchestrator.cli.execute_dry_run")
+    def test_given_run_evals_without_provision_when_main_then_exits_with_config_error(self, mock_execute) -> None:
+        # Arrange
+        mock_execute.side_effect = Exception("--run-evals requires --provision-candidates to be enabled.")
+
+        # Act
+        with patch("sys.argv", ["prog", "--run-evals"]):
+            exit_code = main()
+
+        # Assert
+        self.assertEqual(exit_code, 1)
 
 
 if __name__ == "__main__":

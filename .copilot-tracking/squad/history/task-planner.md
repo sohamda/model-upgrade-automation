@@ -104,3 +104,47 @@ basis: estimated
 ```
 
 **Status**: ✓ Complete
+
+---
+
+## Dispatch: Core Pipeline Live-Mode Package Planning (2026-07-17T21:15:00Z)
+
+**Request**: Generate execution plan for core pipeline live-mode upgrade: from fixture-only (local YAML + curated catalog) to end-to-end live discovery, provisioning, and evaluation workflow. Scope: detect-or-discover retiring model path, live Foundry catalog fetch, top-k candidate provisioning with safety gates, evaluation invocation, and result delivery.
+
+**Context**: Prior TG4 slices (detector, recommender, provisioner, history, reporter) completed fixture-only MVP. Stakeholder feedback: fixture guidance insufficient; require end-to-end live automation. Resolved role: Python Delivery Lead. Classification: Core pipeline / Detector / Recommender / Orchestrator. Autonomy: confirm.
+
+**Output**: `.copilot-tracking/squad/core-pipeline-live-mode-plan.md` — planning artifact with 4-phase live-mode execution:
+1. Detector live retirement source (Foundry discovery or explicit model name)
+2. Recommender live catalog source (regional availability, metadata fetch)
+3. Provisioner and provisioning execution path (ACA deployment with opt-in safety gate)
+4. Orchestrator wiring, CLI flag extension, GitHub Actions integration, and documentation
+
+**Scope Summary**:
+- New CLI flags: `--retiring-model`, `--version`, `--discover-from-azure`, `--live-catalog`, `--provision-candidates`, `--run-evals`, `--top-k`
+- Live retirement detection: retire-model accept OR Foundry schedule discovery
+- Live catalog source: Microsoft.AI SDK integration for regional availability / metadata
+- Provisioning: Azure Container Apps deployment orchestration (explicit opt-in, non-mutating by default)
+- Evaluation gate: requires provision (`--run-evals` only with `--provision-candidates`)
+- Workflow wiring: detect-and-eval GitHub Actions invokes Python orchestrator with live/provision/eval toggles and schedule guard variable
+- Documentation: README usage examples and provisioning safety guardrails
+
+**Member Name**: Kenny
+
+**Recommendation**: Implement 4-phase plan in order; each phase has minimal test coverage; defer production hardening (timeout recovery, ACA failure modes, fallback strategies) to post-delivery phase.
+
+**Consumption Block**:
+```
+model: claude-3-5-sonnet
+model_tier: default
+input_tokens: 2600
+cached_tokens: 0
+output_tokens: 1500
+input_rate: 3.00
+cached_rate: 0.30
+output_rate: 15.00
+est_cost_usd: 0.0303
+est_credits: 3.03
+basis: estimated
+```
+
+**Status**: ✓ Complete

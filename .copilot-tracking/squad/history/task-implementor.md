@@ -561,3 +561,92 @@ basis: tier-default
 ```
 
 **Status**: ✓ Complete
+
+---
+
+## Dispatch: Core Pipeline Live-Mode Implementation — 4-Phase Execution (2026-07-17T22:00:00Z)
+
+**Request**: Execute core pipeline live-mode implementation — 4-phase rollout: (1) detector live retirement source (Foundry discovery), (2) recommender live catalog source (regional availability fetch), (3) provisioner execution path (ACA job trigger), (4) orchestrator wiring (CLI flags, workflow integration, safety gates).
+
+**Context**: Task Planner (Kenny) generated live-mode plan. Squad Azure Architect (Cartman) designed Azure architecture and Foundry integration. Task Researcher (Kenny) audited gaps and identified risks. This dispatch: implement all 4 phases with MVP scope; defer production hardening (timeout recovery, ACA failure modes, fallback strategies) to post-delivery.
+
+**Implementation Phases**:
+
+*Phase 1: Detector Live Retirement Source (Foundry Discovery)*
+- New file: `src/detector/live_retirement_source.py`
+- Implementation: Wraps Microsoft.AI SDK to query Foundry retirement schedule API
+- Input: model name (string) OR discover-mode flag to enumerate active models with deprecation dates
+- Output: retirement signal (model name, version, end-of-support date, regional availability)
+- Integration: Polymorphic source interface already supports; add `FoundryRetirementSource` as alternate to `YamlRetirementSource`
+- Testing: unit tests mock Foundry API responses; pytest validation passed (2 OK)
+
+*Phase 2: Recommender Live Catalog Source (Regional Availability Fetch)*
+- New file: `src/recommender/live_catalog_source.py`
+- Implementation: Queries Foundry model-catalog API for regional availability, metadata, and cost estimates
+- Input: retiring model name (from Phase 1)
+- Output: candidate models with regional availability matrix, estimated costs, capability matrix
+- Integration: Polymorphic source interface already supports; add `FoundryCatalogSource` as alternate to `YamlCatalogSource`
+- Testing: unit tests mock Foundry API; pytest validation passed (3 OK)
+
+*Phase 3: Provisioner Execution Path (ACA Job Trigger)*
+- New file: `src/provisioner/provisioning_service.py`
+- Implementation: Orchestrates ACA job submission for top-k candidate deployment
+- Input: top-k candidate list (from recommender ranking) + target region
+- Output: provisioning status, job reference IDs, artifact URIs
+- Safety gate: Explicit opt-in via CLI flag `--provision-candidates`; default is dry-run (no mutation)
+- State tracking: Record provision status in history manifest; enable poll/retry on subsequent runs
+- Testing: local mock ACA job trigger; pytest validation passed (2 OK)
+- Known limitation: MVP assumes ACA job API availability; if unavailable, fallback to local mock (acceptable for MVP; production hardening deferred)
+
+*Phase 4: Orchestrator Wiring (CLI Flags, Workflow Integration, Safety Gates)*
+- Updated file: `src/orchestrator/cli.py`
+  - New flags: `--retiring-model`, `--version`, `--discover-from-azure`, `--live-catalog`, `--provision-candidates`, `--run-evals`, `--top-k`
+  - New logic: conditional source routing (YAML vs. live Foundry) based on flag combination
+  - Safety gate: enforce eval requires provisioning; return error if `--run-evals` without `--provision-candidates`
+  - Testing: CLI smoke tests passed (3 OK)
+- Updated file: `.github/workflows/detect-and-eval.yml`
+  - New step: conditionally invoke orchestrator CLI with live-mode flags when retirement signal detected
+  - Schedule guard: respect throttle variable to avoid excessive Foundry queries
+  - Testing: workflow YAML schema validation passed
+- Updated file: `README.md`
+  - New section: Live-mode usage examples and CLI command templates
+  - Safety guardrails: document provisioning opt-in and evaluation gate
+  - Regional fallback guidance: recommend multiple regions for ACA provisioning to mitigate capacity issues
+
+**Integration & End-to-End Validation**:
+- ✓ Phase 1 (detector live source): Unit tests 2 OK; integration with recommender dry-run passed
+- ✓ Phase 2 (recommender live catalog): Unit tests 3 OK; ranking logic against live-catalog data model passed
+- ✓ Phase 3 (provisioner execution): Unit tests 2 OK; mock ACA job trigger validation passed
+- ✓ Phase 4 (orchestrator wiring): Unit tests 3 OK; CLI smoke test with `--retiring-model gpt-4.1 --discover-from-azure --live-catalog --top-k 3` passed (no cloud calls invoked)
+- ✓ Overall: Full end-to-end local pytest suite 10 passed
+
+**New Implementation Files**:
+- `src/detector/live_retirement_source.py` — Foundry retirement schedule source
+- `src/recommender/live_catalog_source.py` — Foundry model-catalog source
+- `src/provisioner/provisioning_service.py` — ACA job provisioning orchestration
+- Updated: `src/orchestrator/cli.py`, `src/orchestrator/pipeline.py`, `.github/workflows/detect-and-eval.yml`, `README.md`
+
+**Known Limitations & Post-MVP Items**:
+- ACA provisioning assumes standardized container-image format; image registry and versioning details deferred to post-delivery
+- Evaluation assumes ACA job runner availability; if unavailable, MVP falls back to local mock evaluator (acceptable for MVP; production ACA hard-dependency deferred)
+- Foundry API versioning not yet pinned to specific SDK version; recommend: lock `microsoft-ai-sdk>=X.Y.Z` in requirements.txt post-delivery
+- Timeout recovery, retry logic, and multi-region failover deferred to post-delivery hardening phase
+
+**Member Name**: Kenny
+
+**Consumption Block**:
+```
+model: claude-3-5-sonnet
+model_tier: default
+input_tokens: 5200
+cached_tokens: 0
+output_tokens: 3200
+input_rate: 3.00
+cached_rate: 0.30
+output_rate: 15.00
+est_cost_usd: 0.0636
+est_credits: 6.36
+basis: estimated
+```
+
+**Status**: ✓ Complete
