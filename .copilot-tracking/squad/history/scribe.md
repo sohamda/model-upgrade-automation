@@ -335,3 +335,27 @@
 **Documentation Status**: Canonical TG2 evidence package established. TG3-facing docs (OIDC, setup, troubleshooting) now reference TG2 contract surface instead of restating it, reducing documentation maintenance burden and regression risk.
 
 **Next Steps**: Squad ready for continued TG2 follow-on (policy attestation, subscription-scope boundaries) or TG4 (Core Pipeline Implementation) dispatch pending coordinator decision.
+
+---
+
+## Persistence-Alignment Checkpoint (2026-07-17T19:00:00Z)
+
+**Operation**: Reconciliation write — align scribe checkpoint history with current persisted state after recent multi-turn squad runs and git push.
+
+**State Snapshot**:
+- Dispatch Count: 41
+- Decision Count: 23
+- Estimated Cost (USD): 1.25194
+- Estimated Credits: 125.194
+
+**Artifacts Verified**:
+- `.copilot-tracking/squad/state.json` — dispatchCount=41, decisionCount=23, estCostUsd=1.25194, estCreditsTotal=125.194
+- `.copilot-tracking/squad/consumption.md` — Per-role ledger and run totals reconciled
+- `.copilot-tracking/squad/decisions.md` — 23 decision entries persisted
+- `.copilot-tracking/squad/history/*.md` — All dispatch records with consumption blocks appended
+
+**Status**: ✓ Complete — Scribe checkpoint history now reflects current persisted state
+
+**Purpose**: This checkpoint establishes a reference point for squad state after recent git push and confirms all dispatch counters, cost estimates, and decision records are synchronized across tracking artifacts.
+
+**Next Steps**: Squad state fully reconciled and ready for continued task execution or handoff to next phase.
