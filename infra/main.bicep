@@ -61,7 +61,7 @@ module networking './modules/networking.bicep' = {
     virtualNetworkName: virtualNetworkName
     acaSubnetName: acaSubnetName
     privateEndpointSubnetName: privateEndpointSubnetName
-    tags: tags
+    tags: requiredGovernanceTags
   }
 }
 
@@ -73,7 +73,7 @@ module monitoring './modules/monitoring.bicep' = {
     location: location
     logAnalyticsWorkspaceName: logAnalyticsWorkspaceName
     appInsightsName: appInsightsName
-    tags: tags
+    tags: requiredGovernanceTags
   }
 }
 
@@ -86,7 +86,7 @@ module storage './modules/storage.bicep' = {
     storageAccountName: storageAccountName
     privateEndpointSubnetResourceId: networking.outputs.privateEndpointSubnetResourceId
     privateDnsZoneIds: networking.outputs.privateDnsZoneIds
-    tags: tags
+    tags: requiredGovernanceTags
   }
 }
 
@@ -97,7 +97,7 @@ module keyVault './modules/keyvault.bicep' = {
     keyVaultName: keyVaultName
     privateEndpointSubnetResourceId: networking.outputs.privateEndpointSubnetResourceId
     privateDnsZoneIds: networking.outputs.privateDnsZoneIds
-    tags: tags
+    tags: requiredGovernanceTags
   }
 }
 
@@ -108,7 +108,7 @@ module foundry './modules/foundry.bicep' = {
     foundryAccountName: foundryAccountName
     privateEndpointSubnetResourceId: networking.outputs.privateEndpointSubnetResourceId
     privateDnsZoneIds: networking.outputs.privateDnsZoneIds
-    tags: tags
+    tags: requiredGovernanceTags
   }
 }
 
@@ -122,7 +122,7 @@ module containerApps './modules/container-apps.bicep' = {
     infrastructureSubnetResourceId: networking.outputs.acaSubnetResourceId
     logAnalyticsWorkspaceCustomerId: monitoring.outputs.logAnalyticsWorkspaceCustomerId
     logAnalyticsWorkspaceSharedKey: monitoring.outputs.logAnalyticsWorkspaceSharedKey
-    tags: tags
+    tags: requiredGovernanceTags
   }
 }
 

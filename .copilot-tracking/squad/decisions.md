@@ -26,6 +26,16 @@
 | 8 | Quality Gates and Validation Framework | Wendy | Stan, Kyle, Kenny | Groups 4, 5, 7 |
 | 9 | Runbooks and Release Readiness | Cartman | Stan, Wendy, Kyle, Butters | Groups 6, 7, 8 |
 
+## Operational Cleanup: Instance 001 Resource Removal — 2026-07-17
+
+**Decision**: Complete removal of obsolete instance 001 resources from rg-mua-dev-001, with verification that no remaining 001-named resources exist.
+
+**Rationale**: Instance 001 was superseded by instance 002. Cleanup included requested resource deletion plus two leftover NSGs (vnet-mua-dev-001-snet-pe-nsg-swedencentral, vnet-mua-dev-001-snet-aca-nsg-swedencentral). Verification via `az resource list` confirmed zero remaining 001-named resources. All critical 002 infrastructure (acaenv-mua-dev-002, aca-mua-eval, fnd-mua-dev-002, stmuadev002, kv-mua-dev-002) remains intact.
+
+**Artifact**: `.copilot-tracking/squad/azure-cleanup-001-2026-07-17.md` (PASS)
+
+---
+
 **Task Group Details**:
 
 ### Task Group 1: Architecture and MVP Integration
@@ -461,6 +471,43 @@ This checkpoint marks **foundation readiness for TG4 core pipeline work**. TG2 i
 
 **Output Artifact**: `.copilot-tracking/squad/task-group-01-architecture-blueprint.md`
 
+---
+
+## Azure Readiness Gate A: PASS (2026-07-17T23:59:00Z)
+
+**Decision**: Close Azure Readiness Gate A with **PASS** verdict via alternate non-destructive deployment path (instance=002, northeurope).
+
+**Rationale**: 
+Gate A progressed through multi-phase assessment and remediation cycle:
+1. **Assessment Phase**: RG `rg-mua-dev-001` and OIDC app `model-upgrade-automation-github-oidc` validated as pre-configured.
+2. **Remediation Phase**: Applied tag/RBAC remediation and policy deny remediation to establish baseline compliance posture.
+3. **Baseline Redeploy**: Initial deployment to swedencentral failed due to ACA capacity blocker (quota exhausted).
+4. **Fallback Execution**: Option B deployment executed—alternate non-destructive slice using `instance=002` in `northeurope` region.
+5. **Resource Validation**: All primary resources deployed and accessible:
+   - `acaenv-mua-dev-002` (Container Apps Environment)
+   - `aca-mua-eval` (Container Apps instance)
+   - `stmuadev002` (Storage Account)
+   - `kv-mua-dev-002` (Key Vault)
+   - `fnd-mua-dev-002` (Azure AI Foundry)
+   - `log-mua-dev-002` (Log Analytics)
+   - `appi-mua-dev-002` (Application Insights)
+   - `vnet-mua-dev-002` (Virtual Network)
+   - Private endpoints: all succeeded
+
+**Deployment Status**: ✓ Complete with non-blocking residuals
+- Top-level deployment succeeded for northeurope instance=002 slice
+- Residual non-blocking alerts: `RoleAssignmentExists` and `InvalidLocationUpdate` on existing RG policy assignments pinned to swedencentral (expected; no remediation required for this gate)
+
+**Gate A Outcome**: **PASS** — Infrastructure readiness validated; gated prerequisites satisfied; downstream Gate B execution unblocked.
+
+**Checkpoint Artifact**: `.copilot-tracking/squad/azure-readiness-gate-a-2026-07-17.md`
+
+**Architectural Significance**: No. This is an infrastructure validation checkpoint confirming deployment readiness.
+
+**Next Gate**: Gate B (downstream validation) now eligible for execution.
+
+**Status**: Recorded ✓
+
 **Status**: ✓ Delivery Ready
 
 **Dependent Tasks Unblocked**:
@@ -615,3 +662,46 @@ Known contract gap surfaced: TG5 summary dataset hash differs from TG4 run conte
 **Status**: ✓ Complete as far as locally possible
 
 **Decision Ref**: `.copilot-tracking/squad/decisions.md#tg6-local-first-reporting-and-decision-engine-completion-2026-07-15t204000z`
+
+---
+
+## Azure Readiness Gate B: PASS After Remediation (2026-07-17T20:45:00Z)
+
+**Decision**: Close Azure Readiness Gate B with **PASS** verdict after targeted remediation of OIDC federation and artifact upload workflow issues.
+
+**Rationale**:
+Gate B initially failed due to two pre-deployment prerequisites:
+1. **Artifact Upload Hidden-Path Issue**: GitHub workflow artifact upload step failed to stage checkpoint manifest due to incorrect path handling in `.github/workflows/detect-and-eval.yml` and `.github/workflows/sweep-orphans.yml` (hidden-path directory creation not handled in nested artifact uploads).
+2. **OIDC Subject Mismatch**: Federated credential configuration in Azure AD app registration `model-upgrade-automation-github-oidc` was missing environment-scoped subject variant required for deployments to the `main` environment.
+
+**Remediation Applied**:
+- **Workflow Fixes**: Updated `.github/workflows/detect-and-eval.yml` and `.github/workflows/sweep-orphans.yml` to correct artifact path construction and add nested directory handling. Fixes applied to both artifact upload and manifest staging steps.
+- **OIDC Federated Credential Update**: Added environment-scoped subject variant `repo:sohamda/model-upgrade-automation:environment:main` to existing Azure AD app registration—additive update preserving all prior subject variants (branch ref, tag ref, and main repo subject remain intact).
+
+**Gate B Revalidation**: ✓ PASSED
+
+**Successful Reruns After Remediation**:
+- **detect-and-eval run 29577754373**: ✓ Success — Detection and evaluation pipeline executed; artifacts staged correctly to checkpoint location
+- **sweep-orphans run 29577762865**: ✓ Success — Orphan cleanup and resource validation executed; manifest and metadata staged correctly
+
+**Checkpoint Artifact**: `.copilot-tracking/squad/azure-gate-b-2026-07-17.md` — **PASS**
+
+**Deployment Prerequisites Validated**:
+- ✓ OIDC federation correctly configured for environment-scoped deployments
+- ✓ Artifact upload and staging working for both detect-and-eval and sweep-orphans workflows
+- ✓ Checkpoint manifest materialized and accessible at expected location
+- ✓ All workflow prerequisites gated; no remaining blockers for downstream execution
+
+**Status Notes**:
+- Additional local tracking and infrastructure changes remain in working tree and were intentionally not modified in this remediation step—these changes are staged for a subsequent committed update
+- Gate B validation complete; downstream Gate C and subsequent phases unblocked
+
+**Gate B Outcome**: **PASS** — Gated prerequisites satisfied; infrastructure deployment prerequisites confirmed; downstream validation unblocked.
+
+**Architectural Significance**: No. This is an infrastructure validation checkpoint, not a system design decision.
+
+**Next Gates**: Downstream gates (C, D, ...) eligible for execution.
+
+**Status**: Recorded ✓
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#azure-readiness-gate-b-pass-after-remediation-2026-07-17t204500z`

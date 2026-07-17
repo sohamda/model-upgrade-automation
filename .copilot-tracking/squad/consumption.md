@@ -12,7 +12,9 @@ Estimated cost per dispatched role. All figures are **estimated, not billed**.
 | Python Delivery Lead (Core pipeline) | claude-3-haiku | tier-1 | 46,200 | 0 | 14,300 | $0.3432 | 34.32 |
 | Evaluation + Quality Engineer | claude-3-5-sonnet | default | 15,700 | 0 | 5,400 | $0.1281 | 12.81 |
 | Squad Scribe | claude-3-haiku | tier-1 | 18,600 | 0 | 5,650 | $0.03748 | 3.748 |
-| **Run Total** | | | **152,000** | **0** | **45,850** | **$1.0281** | **102.809** |
+| Squad Azure Readiness Validator | claude-3-haiku | tier-1 | 3,200 | 0 | 1,100 | $0.00520 | 0.520 |
+| Squad Deployer (Cleanup Ops) | tier-1 | fast | 400 | 0 | 150 | $0.00104 | 0.104 |
+| **Run Total** | | | **155,600** | **0** | **47,100** | **$1.03434** | **103.434** |
 
 ## Cost Comparison
 

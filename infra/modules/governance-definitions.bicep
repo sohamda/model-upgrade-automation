@@ -9,6 +9,12 @@ param requiredTags object
 var foundryType = 'Microsoft.CognitiveServices/accounts'
 var storageType = 'Microsoft.Storage/storageAccounts'
 var keyVaultType = 'Microsoft.KeyVault/vaults'
+var nonTaggableResourceTypes = [
+  'Microsoft.Authorization/policyAssignments'
+  'Microsoft.Authorization/roleAssignments'
+  'Microsoft.Network/privateDnsZones/virtualNetworkLinks'
+  'Microsoft.Network/privateEndpoints/privateDnsZoneGroups'
+]
 
 resource enforcePrivateOnlyFoundry 'Microsoft.Authorization/policyDefinitions@2023-04-01' = {
   name: 'mua-tg2-enforce-foundry-private-only'
@@ -146,14 +152,22 @@ resource requireWorkloadTag 'Microsoft.Authorization/policyDefinitions@2023-04-0
     }
     policyRule: {
       if: {
-        anyOf: [
+        allOf: [
           {
-            field: 'tags[\'workload\']'
-            exists: false
+            field: 'type'
+            notIn: nonTaggableResourceTypes
           }
           {
-            field: 'tags[\'workload\']'
-            notEquals: '[parameters(\'expectedValue\')]'
+            anyOf: [
+              {
+                field: 'tags[\'workload\']'
+                exists: false
+              }
+              {
+                field: 'tags[\'workload\']'
+                notEquals: '[parameters(\'expectedValue\')]'
+              }
+            ]
           }
         ]
       }
@@ -184,14 +198,22 @@ resource requireEnvironmentTag 'Microsoft.Authorization/policyDefinitions@2023-0
     }
     policyRule: {
       if: {
-        anyOf: [
+        allOf: [
           {
-            field: 'tags[\'environment\']'
-            exists: false
+            field: 'type'
+            notIn: nonTaggableResourceTypes
           }
           {
-            field: 'tags[\'environment\']'
-            notEquals: '[parameters(\'expectedValue\')]'
+            anyOf: [
+              {
+                field: 'tags[\'environment\']'
+                exists: false
+              }
+              {
+                field: 'tags[\'environment\']'
+                notEquals: '[parameters(\'expectedValue\')]'
+              }
+            ]
           }
         ]
       }
@@ -222,14 +244,22 @@ resource requireManagedByTag 'Microsoft.Authorization/policyDefinitions@2023-04-
     }
     policyRule: {
       if: {
-        anyOf: [
+        allOf: [
           {
-            field: 'tags[\'managedBy\']'
-            exists: false
+            field: 'type'
+            notIn: nonTaggableResourceTypes
           }
           {
-            field: 'tags[\'managedBy\']'
-            notEquals: '[parameters(\'expectedValue\')]'
+            anyOf: [
+              {
+                field: 'tags[\'managedBy\']'
+                exists: false
+              }
+              {
+                field: 'tags[\'managedBy\']'
+                notEquals: '[parameters(\'expectedValue\')]'
+              }
+            ]
           }
         ]
       }
@@ -260,14 +290,22 @@ resource requireTaskGroupTag 'Microsoft.Authorization/policyDefinitions@2023-04-
     }
     policyRule: {
       if: {
-        anyOf: [
+        allOf: [
           {
-            field: 'tags[\'taskGroup\']'
-            exists: false
+            field: 'type'
+            notIn: nonTaggableResourceTypes
           }
           {
-            field: 'tags[\'taskGroup\']'
-            notEquals: '[parameters(\'expectedValue\')]'
+            anyOf: [
+              {
+                field: 'tags[\'taskGroup\']'
+                exists: false
+              }
+              {
+                field: 'tags[\'taskGroup\']'
+                notEquals: '[parameters(\'expectedValue\')]'
+              }
+            ]
           }
         ]
       }
@@ -298,14 +336,22 @@ resource requireOwnerTag 'Microsoft.Authorization/policyDefinitions@2023-04-01' 
     }
     policyRule: {
       if: {
-        anyOf: [
+        allOf: [
           {
-            field: 'tags[\'owner\']'
-            exists: false
+            field: 'type'
+            notIn: nonTaggableResourceTypes
           }
           {
-            field: 'tags[\'owner\']'
-            notEquals: '[parameters(\'expectedValue\')]'
+            anyOf: [
+              {
+                field: 'tags[\'owner\']'
+                exists: false
+              }
+              {
+                field: 'tags[\'owner\']'
+                notEquals: '[parameters(\'expectedValue\')]'
+              }
+            ]
           }
         ]
       }
@@ -336,14 +382,22 @@ resource requireCleanupTag 'Microsoft.Authorization/policyDefinitions@2023-04-01
     }
     policyRule: {
       if: {
-        anyOf: [
+        allOf: [
           {
-            field: 'tags[\'cleanup\']'
-            exists: false
+            field: 'type'
+            notIn: nonTaggableResourceTypes
           }
           {
-            field: 'tags[\'cleanup\']'
-            notEquals: '[parameters(\'expectedValue\')]'
+            anyOf: [
+              {
+                field: 'tags[\'cleanup\']'
+                exists: false
+              }
+              {
+                field: 'tags[\'cleanup\']'
+                notEquals: '[parameters(\'expectedValue\')]'
+              }
+            ]
           }
         ]
       }
