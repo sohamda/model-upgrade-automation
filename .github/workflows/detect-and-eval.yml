@@ -381,6 +381,7 @@ jobs:
       RUN_ID: ${{ needs.preflight.outputs.run_id }}
       DRY_RUN: ${{ needs.preflight.outputs.dry_run }}
       AUTO_PR_ENABLED: ${{ needs.preflight.outputs.auto_pr_enabled }}
+      PREFLIGHT_RESULT: ${{ needs.preflight.result }}
       ORCHESTRATE_RESULT: ${{ needs.orchestrate.result }}
     steps:
       - name: Create finalize summary
@@ -417,6 +418,44 @@ jobs:
           }
           EOF
 
+          cat > .artifacts/workflow-report.md <<EOF
+          # Detect and Evaluate - Workflow Report
+
+          ## Execution Summary
+
+          * Run ID: ${RUN_ID}
+          * Trigger: ${GITHUB_EVENT_NAME}
+          * Dry run: ${DRY_RUN}
+          * Auto remediation enabled: ${AUTO_PR_ENABLED}
+          * Preflight result: ${PREFLIGHT_RESULT}
+          * Orchestration result: ${ORCHESTRATE_RESULT}
+          * Sweep required: ${NEEDS_SWEEP}
+
+          ## Key Evidence
+
+          * .artifacts/run-context.env
+          * .artifacts/run-context.json
+          * .artifacts/orchestrator-summary.json
+          * .artifacts/teardown-plan.json
+          * .artifacts/finalize-summary.md
+          * .artifacts/cleanup-recovery.json
+
+          This report is a human-readable companion to the raw JSON artifacts.
+          EOF
+
+          cat > .artifacts/workflow-report.json <<EOF
+          {
+            "run_id": "${RUN_ID}",
+            "workflow": "detect-and-eval",
+            "trigger": "${GITHUB_EVENT_NAME}",
+            "dry_run": ${DRY_RUN},
+            "auto_pr_enabled": ${AUTO_PR_ENABLED},
+            "preflight_result": "${PREFLIGHT_RESULT}",
+            "orchestrate_result": "${ORCHESTRATE_RESULT}",
+            "needs_sweep": ${NEEDS_SWEEP}
+          }
+          EOF
+
       - name: Upload finalize summary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -424,5 +463,12 @@ jobs:
           path: |
             .artifacts/finalize-summary.md
             .artifacts/cleanup-recovery.json
+            .artifacts/workflow-report.md
+            .artifacts/workflow-report.json
           include-hidden-files: true
           if-no-files-found: error
+
+      - name: Publish run summary
+        shell: bash
+        run: |
+          cat .artifacts/workflow-report.md >> "$GITHUB_STEP_SUMMARY"

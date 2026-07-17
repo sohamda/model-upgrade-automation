@@ -165,6 +165,50 @@ jobs:
             echo "::notice::Dry-run enabled or no stale resources matched. No deletions performed."
           fi
 
+      - name: Create workflow report
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          import os
+
+          artifacts_dir = Path('.artifacts')
+          owned = json.loads((artifacts_dir / 'owned-resources.json').read_text(encoding='utf-8'))
+          stale_ids = [line.strip() for line in (artifacts_dir / 'stale-resource-ids.txt').read_text(encoding='utf-8').splitlines() if line.strip()]
+
+          report = {
+              'workflow': 'sweep-orphans',
+              'run_id': os.environ.get('GITHUB_RUN_ID', ''),
+              'dry_run': os.environ.get('DRY_RUN', 'true').lower() == 'true',
+              'retention_hours': int(os.environ.get('RETENTION_HOURS', '24')),
+              'owned_resources_scanned': len(owned),
+              'stale_resources_matched': len(stale_ids),
+              'deletions_executed': os.environ.get('DRY_RUN', 'true').lower() != 'true' and len(stale_ids) > 0,
+          }
+          (artifacts_dir / 'workflow-report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+
+          lines = [
+              '# Sweep Orphans - Workflow Report',
+              '',
+              f"* Run ID: {report['run_id']}",
+              f"* Dry run: {report['dry_run']}",
+              f"* Retention hours: {report['retention_hours']}",
+              f"* Owned resources scanned: {report['owned_resources_scanned']}",
+              f"* Stale resources matched: {report['stale_resources_matched']}",
+              f"* Deletions executed: {report['deletions_executed']}",
+              '',
+              '## Key Evidence',
+              '',
+              '* .artifacts/owned-resources.json',
+              '* .artifacts/stale-resource-ids.txt',
+              '* .artifacts/sweep-summary.md',
+              '',
+              'This report is a human-readable companion to the raw sweep artifacts.',
+          ]
+          (artifacts_dir / 'workflow-report.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
       - name: Upload sweep summary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -172,3 +216,8 @@ jobs:
           path: .artifacts/*
           include-hidden-files: true
           if-no-files-found: error
+
+      - name: Publish run summary
+        shell: bash
+        run: |
+          cat .artifacts/workflow-report.md >> "$GITHUB_STEP_SUMMARY"

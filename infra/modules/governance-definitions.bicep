@@ -14,6 +14,8 @@ var nonTaggableResourceTypes = [
   'Microsoft.Authorization/roleAssignments'
   'Microsoft.Network/privateDnsZones/virtualNetworkLinks'
   'Microsoft.Network/privateEndpoints/privateDnsZoneGroups'
+  'Microsoft.CognitiveServices/accounts/projects'
+  'Microsoft.CognitiveServices/accounts/deployments'
 ]
 
 resource enforcePrivateOnlyFoundry 'Microsoft.Authorization/policyDefinitions@2023-04-01' = {
