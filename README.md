@@ -37,8 +37,8 @@ Architecture pattern:
 
 Key artifact outputs:
 
-1. TG8 quality gate package: [artifacts/tg8-quality-gates/](artifacts/tg8-quality-gates/)
-2. TG9 release readiness package: [artifacts/tg9-release-readiness/](artifacts/tg9-release-readiness/)
+1. TG8 quality gate package (generated per workflow run and downloadable from Actions artifacts)
+2. TG9 release readiness package (generated per workflow run and downloadable from Actions artifacts)
 3. Azure gate checkpoints: [.copilot-tracking/squad/](.copilot-tracking/squad/)
 
 ## Use in Your Org
@@ -89,9 +89,7 @@ Recommended order:
 
 1. Workflow run page Summary tab now shows compact report output.
 2. Download run artifacts for raw JSON evidence.
-3. Review gate and release outcomes in:
-	1. [artifacts/tg8-quality-gates/tg8-full-20260717/gate-results.json](artifacts/tg8-quality-gates/tg8-full-20260717/gate-results.json)
-	2. [artifacts/tg9-release-readiness/tg9-full-20260717/final-decision.json](artifacts/tg9-release-readiness/tg9-full-20260717/final-decision.json)
+3. See a committed sample output summary in [docs/demo-results.md](docs/demo-results.md).
 
 ## Current Status
 
