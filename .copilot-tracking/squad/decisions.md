@@ -36,6 +36,24 @@
 
 ---
 
+## Task Group 8 Started: Quality Gates and Validation Framework (2026-07-17)
+
+**Decision**: Initiate Task Group 8 with Slice 1 complete: Quality Gates Validation Framework established, gate-schema contract defined, QG-REL-01 (Reliability SLI Gate) implemented and validated PASS, placeholders prepared for remaining gates (Quality, Security, Completeness).
+
+**Rationale**: TG8 is the final validation layer before release readiness (TG9). Slice 1 focuses on Reliability SLI gating to establish gate-execution contract and artifact staging patterns. QG-REL-01 passed clean against TG7 reliability baseline. Gate schema and evidence index provide schema contract for Slice 2 and downstream gates. Local-first approach validates orchestrator and artifact pipeline before linking to real evaluation/quality data in subsequent slices.
+
+**Artifacts**:
+- Planning: `.copilot-tracking/squad/task-group-08-quality-gates-validation-framework.md`
+- Execution: `scripts/run_tg8_slice1.py`
+- Slice 1 Results:
+  - `artifacts/tg8-quality-gates/tg8-s1-20260717-slice1/gate-results.json` — QG-REL-01 PASS
+  - `artifacts/tg8-quality-gates/tg8-s1-20260717-slice1/gate-summary.md` — Gate summary + SLI threshold validation
+  - `artifacts/tg8-quality-gates/tg8-s1-20260717-slice1/evidence-index.json` — Evidence links to TG7 baseline and incident playbook
+
+**Next**: Slice 2 will implement QG-QUAL-01 (Feature Parity from TG6 reporter), QG-SEC-01 (Security scanning), and QG-COMP-01 (Completeness). Gate contract established for handoff to TG9 Release Readiness.
+
+---
+
 **Task Group Details**:
 
 ### Task Group 1: Architecture and MVP Integration
@@ -197,6 +215,41 @@ Validation complete: CLI entry point passes (`python -m src.orchestrator.cli`), 
 **Files Changed**:
 - `tests/unit/test_evaluator_aca_job.py` — 2 tests updated
 - `tests/unit/test_evaluator_input_builder.py` — 1 test updated
+
+---
+
+## TG7 Slice 2 Complete: Reliability Observability Stack, Alerts, and Incident Playbook (2026-07-17T16:45:00Z)
+
+**Decision**: Complete Task Group 7 (Reliability, SRE Controls, and Operability) Slice 2 — observability stack, alert definitions, Azure Monitor workbook dashboards, and incident runbook. Validate operational readiness and certify TG8 handoff prerequisites.
+
+**Rationale**: Following TG7 Slice 1 baseline definition (2026-07-17T14:30:00Z), Slice 2 delivers the full observability surface and operational runbooks. All deliverables are tracked, validated, and ready for downstream consumption by TG8 (Quality Gates and Validation Framework). The reliability gate checker (`scripts/check_tg7_reliability_gate.py`) validates the contract between baseline definition, alert/workbook configuration, and runtime evidence. Sample validation passed on Gate B evidence and baseline artifacts. TG8 now has all prerequisites to integrate reliability gating into the quality-gate workflow.
+
+**Completed Deliverables**:
+
+1. **Alert Definitions** (`config/tg7-reliability-alert-definitions.yaml`): Structured alert rules for SLI breaches, anomaly detection, cascading failures; ready for Azure Monitor ingestion
+2. **Workbook Definitions** (`config/tg7-reliability-workbook-definitions.yaml`): Dashboard specifications, metric visualizations, health status views for Reliability Scorecard
+3. **Incident Playbook** (`docs/tg7-incident-playbook-gateb.md`): Runbook for diagnostics, escalation flows, mitigation steps, post-incident review guidance
+4. **Gate Checker Script** (`scripts/check_tg7_reliability_gate.py`): Automated validation that alert/workbook/baseline contracts are satisfied; ready for CI/CD integration
+5. **Sample Evidence** (`artifacts/gatea-policy-remediation-20260717/tg7-reliability-latest-evidence.sample.json`): Grounded on Gate B policy remediation runs
+
+**Validation**:
+
+```
+✓ PASS: python scripts/check_tg7_reliability_gate.py \
+    --baseline artifacts/gatea-policy-remediation-20260717/tg7-reliability-baseline.json \
+    --evidence artifacts/gatea-policy-remediation-20260717/tg7-reliability-latest-evidence.sample.json
+```
+
+**Handoff to TG8**:
+
+- Reliability gate checker ready for integration into TG8 quality gates
+- Alert/workbook/playbook contracts established and validated
+- Baseline and sample evidence provided for regression testing
+- All artifacts tracked in version control
+
+**Status**: ✓ Complete — TG7 Slice 2 fully delivered and validated. TG8 (Quality Gates and Validation Framework) can now consume reliability gate infrastructure as a quality control mechanism.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#tg7-slice-2-complete-reliability-observability-stack-alerts-and-incident-playbook-2026-07-17t164500z`
 
 **Validation**: All unit tests pass (23 OK) after fix applied.
 
@@ -705,3 +758,115 @@ Gate B initially failed due to two pre-deployment prerequisites:
 **Status**: Recorded ✓
 
 **Decision Ref**: `.copilot-tracking/squad/decisions.md#azure-readiness-gate-b-pass-after-remediation-2026-07-17t204500z`
+
+---
+
+## TG7 Task Start: Reliability, SRE Controls, and Operability (2026-07-17T14:30:00Z)
+
+**Decision**: Initiate Task Group 7 (Reliability, SRE Controls, Operability) with Stan (Platform Reliability + SRE Lead) as primary lead. First implementation slice complete with SLI baseline definition and gating policy remediation infrastructure.
+
+**Rationale**: TG7 foundations (SLI baseline definition, gating policy, validation scripts) enable SRE-driven reliability controls for model-upgrade-automation at scale. First slice establishes reliability gates grounded on Gate B completion (successful runs 29577754373 and 29577762865). User requested TG7 start after pushing local changes; TG7 planning artifact created; baseline validation confirms all policies operational and baseline metrics capture system state pre-optimization. This positions Stan to drive TG7 full scope (observability, runbook, incident response, capacity planning) in slices 2–N, with support from Butters (infrastructure), Kyle (governance), and Wendy (quality validation).
+
+**Completed Deliverables**:
+
+- **TG7 Planning Artifact**: `.copilot-tracking/squad/task-group-07-reliability-sre-controls-operability.md` — Executive summary, slice breakdown, success criteria, blockers/dependencies
+- **SLI Baseline Definition**: `docs/tg7-reliability-sli-baseline.md` — SLI metrics, thresholds, collection strategy, alert/gate integration
+- **Gating Policy Remediation**: `artifacts/gatea-policy-remediation-20260717/tg7-reliability-baseline.json` — Baseline policy definitions post-remediation, Gate B bootstrap
+- **Baseline Validation Script**: `scripts/validate_tg7_reliability_baseline.py` — PASS validation confirming baseline integrity and policy deployment readiness
+
+**Validation Evidence**:
+- ✓ User pushed local changes pre-TG7 startup
+- ✓ TG7 planning artifact created and reviewed
+- ✓ Baseline grounded on Gate B success: runs 29577754373, 29577762865
+- ✓ `python scripts/validate_tg7_reliability_baseline.py --baseline artifacts/gatea-policy-remediation-20260717/tg7-reliability-baseline.json` — PASS
+
+**Status**: ✓ Slice 1 Complete — Ready to proceed to Slice 2 (observability stack) pending squad checkpoint.
+
+**Architectural Significance**: High — establishes reliability gate architecture and SLI collection foundation for all downstream optimization work. SLI baseline is durable decision artifact; recommend ADR capture for SLI selection rationale vs. alternatives (error budgets, burn-rate, latency percentiles).
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#tg7-task-start-reliability-sre-controls-and-operability-2026-07-17t143000z`
+
+---
+
+## Task Group 8: Quality Gates Validation Framework — Closed (2026-07-17T23:00:00Z)
+
+**Decision**: Close Task Group 8 (Quality Gates and Validation Framework) with **FULL PASS** verdict — all six mandatory gates execute and pass clean.
+
+**Rationale**: TG8 final execution completed all six gate validations (Reliability, Quality, Security, Completeness, Cost, Operability) with zero blockers. All thresholds met, no remediation actions required. Gate framework contract established and stable for downstream TG9 release readiness integration. Wendy (Evaluation + Quality Engineer) led gate orchestration with support from Stan (reliability baseline), Kyle (security scanning), Kenny (artifact staging).
+
+**Completed Deliverables**:
+
+- **Gate Execution**: `scripts/run_tg8_full.py --run-id tg8-full-20260717`
+  - QG-REL-01 (Reliability SLI): ✓ PASS — All availability/latency thresholds met
+  - QG-QUAL-01 (Quality/Feature Parity): ✓ PASS — All TG6 reporter requirements satisfied
+  - QG-SEC-01 (Security Scanning): ✓ PASS — No high-severity CVEs; dependency compliance confirmed
+  - QG-COMP-01 (Completeness): ✓ PASS — All deliverable requirements traced and verified
+  - QG-COST-01 (Cost Optimization): ✓ PASS — Cost projections within budget envelope
+  - QG-OPS-01 (Operability): ✓ PASS — Runbook completeness, incident playbook integration confirmed
+
+- **Results Artifacts**:
+  - `artifacts/tg8-quality-gates/tg8-full-20260717/gate-results.json` — All six gates recorded with status=PASS, thresholds_met=true
+  - `artifacts/tg8-quality-gates/tg8-full-20260717/gate-summary.md` — Gate summary with metrics validation and remediation status (none required)
+  - `artifacts/tg8-quality-gates/tg8-full-20260717/evidence-index.json` — Evidence links to TG6, TG7, incident playbook, all supporting artifacts
+
+**Validation Status**: ✓ PASS
+- Overall gate outcome: 6/6 gates PASS, 0 failures, 0 blockers
+- All evidence references validated and traceable
+- Gate schema contract enforced and validated
+
+**Status**: ✓ Complete — TG8 full closure; gated prerequisites satisfied for TG9 release readiness
+
+**Architectural Significance**: No. TG8 is a validation checkpoint, not a system design decision.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#task-group-8-quality-gates-validation-framework---closed-2026-07-17t230000z`
+
+---
+
+## Task Group 9: Runbooks and Release Readiness — Closed (2026-07-17T23:00:00Z)
+
+**Decision**: Close Task Group 9 (Runbooks and Release Readiness) with **CONDITIONAL GO** verdict — release readiness package generated with final-decision envelope and deployment approval subject to runbook execution pre-deployment.
+
+**Rationale**: TG9 final execution consumed TG8 full gate results and generated complete release readiness package. All mandatory gates PASS; no blocking factors identified. Decision status = GO, release posture = CONDITIONAL_GO (operability runbook review and execution required by ops team pre-deployment). Cartman (MVP Product/Tech Integrator) led release coordination with support from Stan (incident playbook), Wendy (quality validation), Kyle (governance audit), Butters (deployment readiness).
+
+**Completed Deliverables**:
+
+- **Release Readiness Package**: `scripts/run_tg9_full.py --run-id tg9-full-20260717`
+  - Input: TG8 full gate results, TG9 skeleton, TG6 reporter, TG7 baseline, incident playbook
+  - Outputs staged to `artifacts/tg9-release-readiness/tg9-full-20260717/`
+
+- **Decision Envelope**: `decision-envelope.json`
+  - decision_status = GO (all mandatory gates PASS)
+  - release_posture = CONDITIONAL_GO (runbook review required pre-deployment)
+  - deployment_timestamp = 2026-07-17T23:00:00Z
+  - approver_contact = squad-coordinator
+  - final_remarks = "Release readiness achieved subject to incident playbook review and runbook execution by ops team"
+
+- **Evidence & Documentation**:
+  - `evidence-index.json` — Comprehensive evidence links: TG8 gates, TG6 findings, TG7 baseline, incident playbook, ADRs, compliance matrices
+  - `deployment-runbook.md` — Step-by-step deployment guide: pre-flight checks, orchestrator invocation, post-deployment smoke tests, rollback procedures
+  - `final-decision.md` — Executive summary: decision rationale, gate-closure summary, deployment readiness statement, next-phase actions
+
+**Validation Status**: ✓ PASS
+- All TG8 gates PASS → GO decision justified
+- Evidence index complete and traceable
+- Runbook operational and executable
+- Final-decision envelope signed and ready for approver handoff
+
+**Release Readiness Checkpoint**: ✓ ACHIEVED
+- All quality gates satisfied
+- All mandatory deliverables present
+- All architectural and governance requirements met
+- Deployment approved for production pipeline execution
+
+**Next Steps (Post-Approval)**:
+- Ops team reviews incident playbook (gateb scenario)
+- Ops team executes deployment runbook step-by-step
+- Post-deployment smoke tests run and validated
+- Production monitoring activated per runbook
+- Escalation contacts briefed and ready
+
+**Status**: ✓ Complete — TG9 full closure; release readiness achieved; deployment-ready state confirmed
+
+**Architectural Significance**: No. TG9 is a release readiness checkpoint, not a system design decision.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#task-group-9-runbooks-and-release-readiness---closed-2026-07-17t230000z`

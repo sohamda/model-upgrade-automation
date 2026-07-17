@@ -10,11 +10,13 @@ Estimated cost per dispatched role. All figures are **estimated, not billed**.
 | Security/Identity + Governance Lead | claude-3-5-sonnet | default | 36,400 | 0 | 10,700 | $0.2697 | 26.97 |
 | DevOps + IaC Engineer | claude-3-5-sonnet | default | 26,500 | 0 | 7,600 | $0.1935 | 19.35 |
 | Python Delivery Lead (Core pipeline) | claude-3-haiku | tier-1 | 46,200 | 0 | 14,300 | $0.3432 | 34.32 |
-| Evaluation + Quality Engineer | claude-3-5-sonnet | default | 15,700 | 0 | 5,400 | $0.1281 | 12.81 |
+| Evaluation + Quality Engineer | mixed (default + tier-1) | default / tier-1 | 18,700 | 0 | 6,200 | $0.1337 | 13.37 |
+| Platform Reliability + SRE Lead | claude-3-haiku | tier-1 | 8,700 | 0 | 3,900 | $0.0226 | 2.26 |
 | Squad Scribe | claude-3-haiku | tier-1 | 18,600 | 0 | 5,650 | $0.03748 | 3.748 |
 | Squad Azure Readiness Validator | claude-3-haiku | tier-1 | 3,200 | 0 | 1,100 | $0.00520 | 0.520 |
 | Squad Deployer (Cleanup Ops) | tier-1 | fast | 400 | 0 | 150 | $0.00104 | 0.104 |
-| **Run Total** | | | **155,600** | **0** | **47,100** | **$1.03434** | **103.434** |
+| Task Implementor (TG8/TG9 Final) | claude-3-haiku | fast | 4,500 | 0 | 1,200 | $0.0084 | 0.84 |
+| **Run Total** | | | **171,800** | **0** | **53,000** | **$1.12054** | **112.054** |
 
 ## Cost Comparison
 

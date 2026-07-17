@@ -1,0 +1,58 @@
+schema_version: 1.0.0
+alert_contract_id: tg7-reliability-alerts-20260717
+source_baseline: artifacts/gatea-policy-remediation-20260717/tg7-reliability-baseline.json
+signals:
+  - id: workflow_failure
+    description: Detect-and-eval workflow failure ratio breach
+  - id: oidc_failure
+    description: OIDC login failures including AADSTS700213 subject mismatch
+  - id: sweep_failure
+    description: Sweep-orphans workflow failure ratio breach
+  - id: latency_breach
+    description: End-to-end workflow completion latency breaches SLO
+alert_rules:
+  - id: ALERT-CRIT-WORKFLOW-FAILURE
+    signal: workflow_failure
+    severity: critical
+    condition:
+      ratio_metric: workflow_success_ratio
+      comparison: lt
+      threshold: 0.99
+      window: rolling_24h
+    gate_b_signature_links:
+      - hidden artifact upload mismatch
+    recommended_action: Trigger incident triage path FP-02 and block promotion
+  - id: ALERT-CRIT-OIDC-FAILURE
+    signal: oidc_failure
+    severity: critical
+    condition:
+      ratio_metric: oidc_login_success
+      comparison: lt
+      threshold: 0.995
+      window: rolling_24h
+    gate_b_signature_links:
+      - AADSTS700213 OIDC federated subject mismatch
+    recommended_action: Trigger incident triage path FP-01 and block workflow mutations
+  - id: ALERT-HIGH-SWEEP-FAILURE
+    signal: sweep_failure
+    severity: high
+    condition:
+      ratio_metric: cleanup_sweep_execution_success
+      comparison: lt
+      threshold: 0.995
+      window: rolling_24h
+    gate_b_signature_links:
+      - hidden artifact upload mismatch
+    recommended_action: Trigger incident triage path FP-04 and enforce dry-run mode
+  - id: ALERT-HIGH-LATENCY-BREACH
+    signal: latency_breach
+    severity: high
+    condition:
+      metric: end_to_end_gate_completion_latency
+      comparison: gt
+      threshold_seconds: 1800
+      window: per_run
+    gate_b_signature_links:
+      - AADSTS700213 OIDC federated subject mismatch
+      - hidden artifact upload mismatch
+    recommended_action: Trigger incident triage path FP-03 and require lifecycle replay

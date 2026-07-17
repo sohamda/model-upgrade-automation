@@ -76,6 +76,9 @@ Gaps and differences identified between research findings and the implementation
 * WI-04: Live TG3 execution evidence pack — Capture non-dry-run OIDC login, ACA invoke/poll, teardown success, and orphan sweeper recovery evidence once Azure access is available (high)
   * Source: TG3 local-only completion boundary
   * Dependency: TG2 contract inputs resolved in Azure and TG4/TG5 execution entrypoints available
+* WI-05: TG8 Slice 2 gate runners — Implement executable runners for QG-UNIT-01, QG-INT-01, QG-CONFIG-01, QG-SEC-01, and QG-E2E-01 to replace not-run placeholders in TG8 evidence packs (high)
+  * Source: TG8 Slice 1 implementation output
+  * Dependency: TG8 Slice 1 script and schema contract (`scripts/run_tg8_slice1.py`) completed
 
 ## Implementation Deviations
 
@@ -87,3 +90,7 @@ Gaps and differences identified between research findings and the implementation
   * Plan specifies: CI quality gates and workflow-level validation must exist
   * Implementation differs: the checks now share one executable validator used locally, in CI, and in workflow preflight
   * Rationale: this reduces drift across workflows, strengthens local-only validation, and improves TG3 readiness without adding TG4 business logic
+* DD-05: TG8 Slice 1 placeholders use strict status enum values with an additional execution_state marker
+  * Plan specifies: quality gates and evidence package validation for delivery readiness
+  * Implementation differs: non-executed gates are encoded as `status=ERROR` with `execution_state=NOT_RUN` to satisfy the strict PASS/FAIL/ERROR enum while preserving explicit pending-gate semantics
+  * Rationale: this preserves schema validity under the requested enum and keeps Slice 2 implementation intent machine-readable

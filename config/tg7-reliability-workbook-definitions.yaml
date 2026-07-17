@@ -1,0 +1,43 @@
+schema_version: 1.0.0
+workbook_id: tg7-reliability-workbook-20260717
+source_alert_contract: config/tg7-reliability-alert-definitions.yaml
+dashboard:
+  name: TG7 Reliability Operations Workbook
+  default_time_range: P1D
+  panels:
+    - id: panel-workflow-failure
+      title: Workflow Failure Signal
+      signal: workflow_failure
+      visualization: timeseries
+      primary_metric: workflow_success_ratio
+      threshold:
+        comparison: gte
+        value: 0.99
+      triage_entrypoint: docs/tg7-incident-playbook-gateb.md#workflow-failure-path
+    - id: panel-oidc-failure
+      title: OIDC Failure Signal
+      signal: oidc_failure
+      visualization: table
+      primary_metric: oidc_login_success
+      threshold:
+        comparison: gte
+        value: 0.995
+      triage_entrypoint: docs/tg7-incident-playbook-gateb.md#oidc-failure-path
+    - id: panel-sweep-failure
+      title: Sweep Failure Signal
+      signal: sweep_failure
+      visualization: timeseries
+      primary_metric: cleanup_sweep_execution_success
+      threshold:
+        comparison: gte
+        value: 0.995
+      triage_entrypoint: docs/tg7-incident-playbook-gateb.md#sweep-failure-path
+    - id: panel-latency-breach
+      title: Latency Breach Signal
+      signal: latency_breach
+      visualization: scatter
+      primary_metric: end_to_end_gate_completion_latency
+      threshold:
+        comparison: lte
+        value_seconds: 1800
+      triage_entrypoint: docs/tg7-incident-playbook-gateb.md#latency-breach-path

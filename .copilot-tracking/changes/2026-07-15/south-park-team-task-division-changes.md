@@ -16,6 +16,10 @@ Expanded TG4 dry-run staging contract coverage with focused unit tests that vali
 
 * docs/tg2-operator-evidence.md - Canonical TG2 operator evidence package covering identity inputs, governance expectations, cleanup tags, and minimum evidence before live TG3 runs
 * scripts/validate_tg3_contracts.py - Shared local validator for TG3 workflow, config, and documentation contracts used by CI and workflow preflight
+* scripts/run_tg8_slice1.py - Deterministic TG8 Slice 1 generator that emits the quality-gate evidence package and normalizes TG7 reliability gate output into QG-REL-01
+* artifacts/tg8-quality-gates/tg8-s1-20260717-slice1/gate-results.json - TG8 Slice 1 gate taxonomy results with strict PASS/FAIL/ERROR status enum and not-run placeholders
+* artifacts/tg8-quality-gates/tg8-s1-20260717-slice1/gate-summary.md - Human-readable TG8 Slice 1 gate rollup
+* artifacts/tg8-quality-gates/tg8-s1-20260717-slice1/evidence-index.json - Evidence contract index for TG8 Slice 1 inputs and outputs
 
 ### Modified
 
@@ -35,6 +39,7 @@ Expanded TG4 dry-run staging contract coverage with focused unit tests that vali
 * .github/workflows/sweep-orphans.yml - Added checkout and shared TG3 contract validation before cleanup execution
 * tests/unit/test_history_preview.py - Added manifest relative-path contract coverage for staged dry-run artifacts
 * tests/unit/test_orchestrator_cli.py - Added staged artifact materialization and dry-run summary/history coherence coverage
+* scripts/run_tg8_slice1.py - Updated placeholder handling to keep gate status enum strict (PASS/FAIL/ERROR) while representing pending gates as execution_state=NOT_RUN
 
 ### Removed
 
@@ -50,9 +55,13 @@ Expanded TG4 dry-run staging contract coverage with focused unit tests that vali
   * Those execution paths require TG4 and TG5 code surfaces plus Azure-backed runtime verification and were intentionally not implemented in this TG3-local round
 * No implementation changes were required in src/orchestrator/pipeline.py
   * The stronger staging-coherence tests passed against the current local dry-run implementation
+* Pending TG8 categories are represented as not-run placeholders with status ERROR and execution_state=NOT_RUN
+  * Request required strict PASS/FAIL/ERROR status enum and placeholder preservation in the same schema
 
 ## Release Summary
 
 TG2 local infrastructure contract hardening is now in place. The Bicep entrypoint and module graph compile cleanly with `az bicep build --file infra/main.bicep`. TG3 now has a repo-executable validation contract shared by CI and both delivery workflows, improving local readiness without Azure access. The main remaining TG2 and TG3 gaps are live Azure verifications: real OIDC federation state, effective RBAC assignments, deployed policy assignment enforcement, private endpoint DNS or data-plane validation from runtime subnets, and non-dry-run orchestration evidence for ACA invoke, poll, and teardown.
 
 TG4 dry-run artifact staging now has broader unit-level evidence: manifest relative paths are asserted to remain aligned with the `artifacts/<run_id>/` contract, and orchestrator staging is verified end-to-end for exact materialized files plus coherence between staged `dry_run_output.json`, `history_preview.json`, and the manifest-advertised payload files.
+
+TG8 Slice 1 quality-gate scaffolding is now in place with a deterministic script entrypoint and a generated evidence package contract under `artifacts/tg8-quality-gates/<run_id>/`. QG-REL-01 executes against existing TG7 baseline and evidence via `scripts/check_tg7_reliability_gate.py`, while unit/integration/config/security/e2e remain schema-valid not-run placeholders ready for Slice 2 runners.
