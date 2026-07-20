@@ -163,14 +163,19 @@ model-upgrade-automation/
 │
 ├── src/
 │   ├── detector/
-│   │   ├── retirement_scraper.py      # parses Foundry retirement doc
+│   │   ├── arm_models_client.py       # PRIMARY: ARM Models API (azure-mgmt-cognitiveservices)
+│   │   ├── retirement_doc_parser.py   # ONLY for suggestedReplacement hint (raw MD from GitHub)
 │   │   ├── deployed_introspector.py   # ARM query for live deployments
+│   │   ├── merger.py                  # union & dedupe
 │   │   └── models.py                  # pydantic types: RetiringModel, Candidate
 │   │
 │   ├── recommender/
-│   │   ├── catalog_scraper.py         # parses models-sold-directly + region-availability docs
-│   │   ├── scorer.py                  # rule-based scoring
-│   │   ├── filters.py                 # hard constraints (region, modality, context)
+│   │   ├── catalog_builder.py         # unifies ARM Models API + docs + HF into CatalogEntry
+│   │   ├── pricing_client.py          # Azure Retail Prices API (public, no auth)
+│   │   ├── hf_client.py               # HuggingFace Hub API (OSS model metadata)
+│   │   ├── doc_markdown_parser.py     # raw MD fallback for missing fields
+│   │   ├── scorer.py                  # rule-based 7-dim scoring
+│   │   ├── filters.py                 # hard constraints
 │   │   └── weights.py                 # loads recommender.yaml
 │   │
 │   ├── provisioner/
@@ -251,7 +256,156 @@ model-upgrade-automation/
 
 ---
 
-## 6. Weekly workflow — step by step
+## 6. Official data sources & APIs
+
+Research verified July 20, 2026. **Every data source used by the detector and recommender is enumerated here** — from ARM APIs (preferred) to doc-markdown parsing (fallback for gaps).
+
+### 6.1 ARM Models API (PRIMARY — retirement, availability, capabilities)
+
+| Aspect | Value |
+|---|---|
+| Endpoint | `GET https://management.azure.com/subscriptions/{sub}/providers/Microsoft.CognitiveServices/locations/{loc}/models` |
+| API version | `2025-06-01` (GA — pin this; do not auto-upgrade) |
+| Auth | ARM Bearer token via OIDC. `Reader` role on subscription suffices. |
+| SDK | `azure-mgmt-cognitiveservices ≥ 14.0.0`: `CognitiveServicesManagementClient(...).models.list(location=...)` |
+| Scope | Per-location. Fan out across `config.allowed_regions` and union. |
+
+**Fields the tool consumes:**
+- `model.name`, `model.version`, `model.format` — model identity
+- `model.lifecycleStatus` ∈ `{Stable, Preview, GenerallyAvailable, Deprecating, Deprecated}` — detector signal. `Deprecating` ↔ "Legacy" in UI.
+- `model.deprecation.inference` — model-level retirement datetime (ISO)
+- `model.deprecation.fineTune` — separate retirement for fine-tuning
+- `model.skus[].name` — deployment type: `Standard | GlobalStandard | DataZoneStandard | ProvisionedManaged | DataZoneProvisionedManaged`
+- `model.skus[].deprecationDate` — **per-SKU** retirement date (can differ from model-level)
+- `model.skus[].cost[].meterId` — billing meter ID → **join key to Pricing API**
+- `model.capabilities` (free-form string→string dict) — informal keys like `chatCompletion`, `inference`, `embeddings`, `fineTune`, `scaleType`. Newer models may include additional undocumented keys (context window, modality hints). Read defensively.
+- `model.systemData.createdAt` — proxy for "how new is this model"
+
+**Known gaps in this API:**
+- ❌ No `suggestedReplacement` field. Use §6.4 fallback.
+- ❌ No formal `contextWindow` / `maxOutputTokens` schema — informal `capabilities` keys only. Use §6.5 fallback.
+- ❌ No `trainingDataCutoff` field. Use §6.5 fallback.
+- ⚠️ Region-availability requires fan-out (no single-shot API).
+
+### 6.2 Azure OpenAI Data Plane Models API (SECONDARY — per-account view)
+
+| Aspect | Value |
+|---|---|
+| Endpoint | `GET {resource}.openai.azure.com/openai/models?api-version=2024-10-21` |
+| API version | `2024-10-21` (GA) |
+| Auth | API key OR Entra ID |
+| Scope | Only models the specific resource has access to |
+
+**Not used by the tool** (ARM API is richer for automation). Documented here for consumers who want to add last-mile runtime alerts inside their own apps. Returns `lifecycle_status` (only `preview` / `generally-available` — coarser than ARM) and `deprecation.inference` as Unix timestamps.
+
+### 6.3 Azure Retail Prices API (PRIMARY — per-token pricing)
+
+| Aspect | Value |
+|---|---|
+| Endpoint | `GET https://prices.azure.com/api/retail/prices` |
+| API version | `2023-01-01-preview` (recommended — includes non-primary meters) |
+| Auth | **None.** Public, unauthenticated. |
+| GA? | ✅ GA |
+
+**Required filters** (verified against live API July 2026):
+```
+$filter=productName eq 'Azure OpenAI' and priceType eq 'Consumption' and armRegionName eq '<region>'
+```
+
+⚠️ **Critical rename**: `serviceName eq 'Azure OpenAI Service'` (old) returns empty. Use `serviceName eq 'Foundry Models'` (new, 2025+) or omit and filter on `productName` instead.
+
+**Join to Models API**: use `ModelSku.cost[].meterId` from the ARM API as an exact match on `meterId` in the pricing response. When `cost[]` isn't populated (some newer models), fuzzy-match by parsing `skuName` (see §6.6).
+
+**Observed `skuName` patterns** (build regex library incrementally):
+- `gpt 4.1 Inp regnl` → gpt-4.1 Regional Standard input
+- `gpt 4.1 nano cached Inp glbl` → gpt-4.1-nano Global cached input
+- `o1 1217 Inp glbl` → o1 (version 2024-12-17) Global input
+- `o3 mini 0131 Batch Outp Data Zone` → o3-mini Batch Data Zone output
+- Structure: `{model} {version_suffix?} {Inp|Outp|cached Inp|Batch Inp|Batch Outp} {glbl|Data Zone|rgnl|ptu|Batch}`
+
+**Known gap**: newer models (e.g., gpt-5.1 as of July 2026) may not appear in the pricing API immediately after launch. Handle with `pricing_unavailable` flag; do NOT block scoring.
+
+### 6.4 GitHub-hosted raw markdown (FALLBACK — replacement hints)
+
+The `Replacement` column of the retirement schedule doc is the **only** source of Microsoft's own suggested-replacement hints. No API exposes it.
+
+| Aspect | Value |
+|---|---|
+| URL | `https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs-pr/live/articles/foundry/openai/concepts/model-retirement-schedule.md` |
+| Format | Markdown with tables |
+| Change frequency | Weekly-ish |
+| Stability | High — file path stable since 2024 |
+
+**Why raw MD instead of learn.microsoft.com HTML**: no dynamic rendering, no CSS/JS, faster, less likely to break parser. Front matter includes `ms.date` = last-updated timestamp for staleness detection.
+
+### 6.5 GitHub-hosted raw markdown (FALLBACK — capabilities table)
+
+For context window, max output, training cutoff, and modality when the ARM `capabilities` dict doesn't have them.
+
+| Aspect | Value |
+|---|---|
+| URL | `https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs-pr/live/articles/foundry/foundry-models/concepts/models-sold-directly-by-azure.md` |
+| Parser | `markdown-it-py` + custom table extractor |
+| Cache | 24h in Blob |
+| Snapshot test | Yes — capture last-known-good version, alert on schema drift |
+
+### 6.6 HuggingFace Hub API (FALLBACK — OSS model metadata)
+
+For open-source models (Llama, Mistral, DeepSeek, Phi, etc.). Not useful for OpenAI/xAI/Anthropic closed models.
+
+| Aspect | Value |
+|---|---|
+| Endpoint | `GET https://huggingface.co/api/models/{org}/{name}` |
+| Auth | None (rate-limited); optional token for higher limits |
+| Fields | `config.max_position_embeddings` (context window), `pipeline_tag` (modality), `library_name`, `model_index[].results[]` (benchmarks) |
+| Cache | 24h |
+| Fail mode | Rate-limit → return `null`, recommender drops that dimension |
+
+### 6.7 HuggingFace Open LLM Leaderboard (FALLBACK — pre-filter benchmark signal)
+
+Used ONLY for pre-shortlisting candidates. The tool's own ACA eval run is the authoritative quality signal.
+
+| Aspect | Value |
+|---|---|
+| Endpoint | `GET https://huggingface.co/api/datasets/open-llm-leaderboard/results` |
+| Coverage | Open models only (no GPT-5.x, no Claude, no Grok) |
+| Metrics | MMLU, ARC, HellaSwag, TruthfulQA, GSM8K |
+
+For closed models with no benchmark API, the recommender **skips the benchmark dimension** and re-normalizes weights — it does not fabricate a score.
+
+### 6.8 Azure Resource SKUs API (SECONDARY — subscription-level SKU availability)
+
+| Aspect | Value |
+|---|---|
+| Endpoint | `GET https://management.azure.com/subscriptions/{sub}/providers/Microsoft.CognitiveServices/skus?api-version=2025-06-01` |
+| Use | Pre-flight check: does this subscription have any CognitiveServices SKU in this region at all? `restrictions[]` field explains why a SKU may be blocked (quota, offer type). |
+
+Not used for model-catalog work, but useful in `scripts/validate-networking.py` and in the report when a candidate can't be provisioned due to subscription-level limits.
+
+### 6.9 Complete API summary table
+
+| # | Signal | Source | Type | GA? | Auth |
+|---|---|---|---|---|---|
+| 1 | Model lifecycle & retirement date | ARM Models API | Official REST | ✅ 2025-06-01 | ARM Bearer |
+| 2 | Per-SKU retirement date | ARM Models API `skus[].deprecationDate` | Official REST | ✅ 2025-06-01 | ARM Bearer |
+| 3 | Deployment types (Std/Global/DZ/PTU) | ARM Models API `skus[].name` | Official REST | ✅ 2025-06-01 | ARM Bearer |
+| 4 | Region availability | ARM Models API per-location | Official REST | ✅ 2025-06-01 | ARM Bearer |
+| 5 | Functional capabilities (chat/embeddings/etc) | ARM Models API `capabilities` | Official REST | ✅ 2025-06-01 | ARM Bearer |
+| 6 | Context window / max output | ARM `capabilities` (informal) → docs MD → HF | Cascading | ⚠️ informal | Mixed |
+| 7 | Training data cutoff | Docs MD → HF | Fallback only | ❌ no API | None/HF |
+| 8 | Modality | ARM `capabilities` inference → docs MD → HF | Cascading | ⚠️ | Mixed |
+| 9 | Suggested replacement (Microsoft's hint) | Raw MD on GitHub | Fallback only | ❌ no API | None |
+| 10 | Per-token pricing | Retail Prices API | Official REST | ✅ | None |
+| 11 | Meter → model join | ARM `skus[].cost[].meterId` × Retail `meterId` | Join | ✅ | ARM Bearer |
+| 12 | Benchmark scores (pre-filter) | HF Open LLM Leaderboard (OSS only) | Fallback only | ❌ no MSFT API | None |
+| 13 | Benchmark scores (real signal) | **Our own ACA eval run** | Generated | ✅ | Managed identity |
+| 14 | Subscription-level SKU restrictions | Resource SKUs API | Official REST | ✅ 2025-06-01 | ARM Bearer |
+
+**Bottom line**: retirement detection and pricing are fully API-backed. Capability metadata is a cascade with graceful degradation. Benchmark quality is generated by us, not consumed from a third party. The only doc scraping in the critical path is one column (`Replacement`) from one markdown file, fetched from raw GitHub.
+
+---
+
+## 7. Weekly workflow — step by step
 
 `.github/workflows/detect-and-eval.yml`
 
@@ -311,42 +465,76 @@ sequenceDiagram
 
 ---
 
-## 7. Component responsibilities
+## 8. Component responsibilities
 
-### 7.1 Detector (`src/detector/`)
-- **Retirement scraper.** Fetches `https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule` and the `foundry-classic` view. Parses the markdown tables. Emits typed `RetiringModel(model_id, version, lifecycle, retirement_date, replacement_hint)`. Caches the raw doc in Blob for diff-on-change alerting.
-- **Deployed introspector.** For each subscription listed in config, calls `Microsoft.CognitiveServices/accounts/deployments/list`. Cross-references with retirement list. Only queried if `discover_from_azure: true` in config.
-- **Merger.** Union of user-declared models + introspected models, deduped, filtered by `retirement_horizon_days`.
+### 8.1 Detector (`src/detector/`)
 
-### 7.2 Recommender (`src/recommender/`)
-- **Catalog scraper.** Fetches the [`models-sold-directly-by-azure`](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure) capability doc and the [region availability doc](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability). Parses into typed catalog entries: `{model_id, version, context_window, max_output, modality, training_cutoff, retirement_date, availability[deployment_type][region]}`.
-- **Pricing.** Scrapes [`azure.microsoft.com/pricing/details/azure-openai/`](https://azure.microsoft.com/en-us/pricing/details/azure-openai/) via a lightweight headless fetch (dynamic table). Cached for 24h.
-- **Filters (hard constraints, exclude before scoring):**
-  - `modality ⊇ retiring_modality` (text/image/audio parity)
-  - `context_window ≥ retiring_context * min_context_ratio` (default 1.0)
-  - Availability includes at least one region in `config.allowed_regions`
-  - Availability includes the required `deployment_type` (DZ / Global / Regional / PTU)
-  - Model not itself retiring within `stability_horizon_days` (default 180)
-  - `family in {gpt}` if `family_lock: gpt` set — MVP default per user preference
-- **Scoring rubric (rule-based, weights in `recommender.yaml`):**
-  | Dimension | Default weight | Signal |
-  |---|---|---|
-  | Longevity | 20 | Days until candidate retires |
-  | Cost delta (input) | 20 | (retiring$ − candidate$) / retiring$ |
-  | Cost delta (output) | 20 | Same on output tokens |
-  | Context ratio | 10 | candidate_ctx / retiring_ctx (capped at 2×) |
-  | Modality match | 10 | Superset bonus |
-  | Training recency | 10 | Months newer than retiring model |
-  | EU coverage | 10 | # of EU regions with DZ availability |
-- **Output.** Top N candidates per retiring model, with `score`, `score_breakdown`, `pros`, `cons`, `predicted_$_delta`.
+**Primary data source: ARM Models API (official, GA).** No doc scraping for the core retirement signal.
 
-### 7.3 Provisioner (`src/provisioner/`)
+| Signal | Source | Notes |
+|---|---|---|
+| Lifecycle status (`Deprecating`, `Deprecated`, `Stable`, `Preview`, `GenerallyAvailable`) | `GET management.azure.com/subscriptions/{sub}/providers/Microsoft.CognitiveServices/locations/{loc}/models?api-version=2025-06-01` | ARM Bearer via OIDC. `Reader` role suffices. |
+| Model-level retirement date | `model.deprecation.inference` | ISO datetime |
+| Per-SKU retirement date | `model.skus[].deprecationDate` | ⚠️ Different SKUs of the same model can retire on different dates — must be respected |
+| Deployment types available | `model.skus[].name` (`Standard`, `GlobalStandard`, `DataZoneStandard`, `ProvisionedManaged`, `DataZoneProvisionedManaged`) | Direct enum |
+| Billing meter ID | `model.skus[].cost[].meterId` | **Join key to Pricing API** |
+| Functional capabilities | `model.capabilities` dict (`chatCompletion`, `inference`, `fineTune`, `embeddings`) | Well-typed booleans-as-strings |
+| Context window, max output tokens | `model.capabilities` dict (informal keys — not in official schema) | **Read defensively; fall back to catalog scraper if key missing.** Log discovered keys to Blob for future analysis. |
+
+**Component modules:**
+- **`arm_models_client.py`** — thin wrapper around `azure-mgmt-cognitiveservices` v14+ SDK: `CognitiveServicesManagementClient.models.list(location=...)`. Iterates over `config.allowed_regions` and unions the results, deduped by `(model.name, model.version)`. Caches raw responses in Blob for diff-on-change.
+- **`retirement_doc_parser.py`** — parses the `Replacement` hint column, which is **NOT in the API**. Fetches the [raw markdown from the docs repo](https://github.com/MicrosoftDocs/azure-ai-docs-pr/blob/live/articles/foundry/openai/concepts/model-retirement-schedule.md) instead of the rendered HTML (more stable, no dynamic rendering). Only extracts the `Replacement` column, keyed by `(model_id, version)`. Everything else comes from the API.
+- **`deployed_introspector.py`** — for each subscription in config, calls `Microsoft.CognitiveServices/accounts/deployments/list` to find which of the retiring models are actually in production use. Only queried if `discover_from_azure: true`.
+- **`merger.py`** — combines: (user-declared watched models) ∪ (deployed models) ∪ (any model matching lifecycle in `{Deprecating, Deprecated}` from the API), filtered by `retirement_horizon_days`. Emits typed `RetiringModel(model_id, version, sku_name, lifecycle, retirement_date, replacement_hint, meter_id)`.
+
+**Data plane fallback (per-account view).** For runtime awareness inside prod code — not for automation — the data plane endpoint `GET {resource}.openai.azure.com/openai/models?api-version=2024-10-21` returns per-account lifecycle info with Unix-timestamp deprecation dates. **Not used by this tool** (control plane is richer), but consumers can call it from their own apps for last-mile alerts.
+
+### 8.2 Recommender (`src/recommender/`)
+
+**Primary sources:** ARM Models API (region × deployment matrix) + Azure Retail Prices API (per-token cost). Doc scraping only for gaps.
+
+| Signal | Source | Notes |
+|---|---|---|
+| Candidate universe | ARM Models API across `config.allowed_regions` | Same call as detector, filtered to `lifecycleStatus ∈ {GenerallyAvailable, Stable}` and not-retiring-within-`min_stability_horizon_days` |
+| Region availability matrix | Fan-out per-region ARM calls | O(n_regions). Cache 24h in Blob. |
+| Deployment type support | `model.skus[].name` | Filter by consumer's `deployment_type_preference` |
+| Per-token pricing | Azure Retail Prices API: `GET prices.azure.com/api/retail/prices?$filter=productName eq 'Azure OpenAI' and priceType eq 'Consumption' and armRegionName eq '<region>'` | **No auth needed.** Public, GA. Join via `meterId` when available; fuzzy-match by `skuName` as fallback (`gpt 5.1 Inp glbl`-style naming). |
+| Context window / max output | 1st: `model.capabilities` informal keys · 2nd: HuggingFace Hub API for OSS models · 3rd: `retirement_doc_parser` extended to also parse capability table from the [models-sold-directly-by-azure markdown](https://github.com/MicrosoftDocs/azure-ai-docs-pr/blob/live/articles/foundry/foundry-models/concepts/models-sold-directly-by-azure.md) | **Multi-source cascade with source tracking.** Every capability field annotated with `{value, source, fetched_at}` in the artifact for auditability. |
+| Training data cutoff | Same cascade as above (no API) | Same |
+| Modality (text/image/audio) | Inferred from `capabilities` keys (`chatCompletion`, `embeddings`, etc.) + fallback to catalog markdown | |
+| Benchmark scores (quality, safety) | **No official API.** Fallbacks: (a) HuggingFace Open LLM Leaderboard for OSS models via `https://huggingface.co/api/datasets/open-llm-leaderboard/results` · (b) skip benchmark signal for closed models like GPT-5.x — mark score dimension as `unavailable` and reduce its weight to zero for that candidate | The tool's OWN eval run generates the real quality signal; leaderboard scores are only used for pre-filtering the shortlist |
+
+**Component modules:**
+- **`catalog_builder.py`** — unifies ARM Models API + doc-markdown parser + HuggingFace API into a typed `CatalogEntry(model_id, version, context_window, max_output, modality, training_cutoff, availability[region][sku_name], pricing[region][sku_name][meter_type], benchmarks?)`. Every field carries `{value, source, confidence}`.
+- **`pricing_client.py`** — thin wrapper on Azure Retail Prices API. Handles pagination, the `serviceName='Foundry Models'` filter (new as of 2025/2026 — old `Azure OpenAI Service` returns empty), and the fuzzy SKU-name matching. Ships with a **discovery mode** that logs all seen `skuName` patterns per model so we can build a robust regex library over time.
+- **`hf_client.py`** — HuggingFace Hub API client for OSS models (Llama, Mistral, DeepSeek). Cached 24h.
+- **`filters.py`** — hard constraints (region intersection, deployment type support, lifecycle horizon, family lock).
+- **`scorer.py`** — 7-dimension weighted score from `recommender.yaml`. Handles `unavailable` benchmark scores by dropping that dimension and re-normalizing weights.
+- **`weights.py`** — loads `recommender.yaml`.
+
+### 8.2a Data-source cascade summary
+
+| What we need | 1st choice (API, GA) | 2nd choice | 3rd choice |
+|---|---|---|---|
+| Retirement date | ✅ ARM Models API | Data plane `/openai/models` | — |
+| Suggested replacement hint | ❌ (not in API) | Raw markdown on GitHub (retirement-schedule.md) | — |
+| Deployment type + region availability | ✅ ARM Models API per region | — | — |
+| Pricing per token | ✅ Retail Prices API | — | — |
+| Context window / max output | ⚠️ `capabilities` dict (informal) | HuggingFace Hub (OSS) | Markdown parser (`models-sold-directly-by-azure.md`) |
+| Training cutoff | ❌ | HuggingFace Hub (OSS) | Markdown parser |
+| Modality | ⚠️ inferred from `capabilities` | HuggingFace Hub | Markdown parser |
+| Benchmark scores (pre-filter only) | ❌ (portal API not public) | HuggingFace Open LLM Leaderboard (OSS only) | Drop the dimension; rely on our own eval run |
+| Suggested replacement rationale | ❌ | Our recommender rubric generates this | — |
+
+**Principle: every capability the API doesn't give us is annotated in the report with its source**, so users can audit *why* a candidate was ranked as it was.
+
+### 8.3 Provisioner (`src/provisioner/`)
 - Uses `azure-mgmt-cognitiveservices` SDK. Deployment name convention: `mua-<retiring>-<candidate>-<runid>` for greppability.
 - Tags every ephemeral resource: `owner=model-upgrade-automation`, `run_id=<...>`, `retiring_for=<...>`.
 - Since Foundry has `publicNetworkAccess: Disabled`, `az cognitiveservices` calls from GHA go through ARM (control plane, still public/authenticated). Data plane calls (inference) go through the private endpoint from ACA.
 - Teardown is idempotent + safe to re-run.
 
-### 7.4 Evaluator (`src/evaluator/`)  — runs inside ACA job
+### 8.4 Evaluator (`src/evaluator/`)  — runs inside ACA job
 - **Custom evals** — reuse the exact evaluator set from `azure-ai-redteam-eval`:
   - `GroundednessEvaluator`, `CoherenceEvaluator`, `RelevanceEvaluator`, `FluencyEvaluator`, `ConcisenessEvaluator`
   - Plus safety: `ViolenceEvaluator`, `SexualEvaluator`, `SelfHarmEvaluator`, `HateUnfairnessEvaluator`
@@ -358,7 +546,7 @@ sequenceDiagram
   - `results/<run_id>/<candidate>/redteam.json` — attack results + block rates
 - **Telemetry.** Every score also emitted as an App Insights custom metric with dimensions `{run_id, retiring_model, candidate_model, evaluator, deployment_type}`. Mirrors the source repo's `score_tracker.py` pattern.
 
-### 7.5 Reporter (`src/reporter/`)
+### 8.5 Reporter (`src/reporter/`)
 - **Aggregator.** Loads all candidate results for the run + baseline scores (previous eval of retiring model, if available) → comparison matrix.
 - **Winner logic.**
   1. Filter out candidates with any safety score below `hard_safety_threshold`.
@@ -369,14 +557,14 @@ sequenceDiagram
 - **GH Issue.** Weekly rolling summary — one issue per calendar week, updated with each run's outcomes. Uses labels `model-upgrade`, `automated`.
 - **Remediation PR (opt-in).** Generates a Bicep parameter file diff for the winning candidate model + version. Marks PR as draft with `needs-human-review` label. Never auto-merges. Does **not** touch APIM policies — routing changes are the consumer's responsibility.
 
-### 7.6 Orchestrator (`src/orchestrator/main.py`)
+### 8.6 Orchestrator (`src/orchestrator/main.py`)
 The GHA entrypoint. Thin coordinator that stitches the above components. Emits structured logs (JSON) so App Insights can correlate a run across GHA + ACA sides via `run_id`.
 
 ---
 
-## 8. Data model & storage
+## 9. Data model & storage
 
-### 8.1 Skip-index (Table Storage)
+### 9.1 Skip-index (Table Storage)
 - **Table name:** `evalhistory`
 - **PartitionKey:** `<retiring_model_id>` (e.g. `gpt-4.1`)
 - **RowKey:** `<candidate_model_id>__<candidate_version>__<dataset_sha256_first16>`
@@ -396,26 +584,26 @@ The GHA entrypoint. Thin coordinator that stitches the above components. Emits s
 - **Lookup pattern:** point-read on PK + RK. Sub-100ms even at scale.
 - **TTL:** if `EvaluatedAt + TtlDays < today`, treated as expired → re-eval. Default TTL 90 days.
 
-### 8.2 Raw artifacts (Blob Storage)
+### 9.2 Raw artifacts (Blob Storage)
 - **Container:** `eval-artifacts`
 - **Path convention:** `<run_id>/<retiring_model>/<candidate_model>/<version>/{custom.json,redteam.json,manifest.json,logs.jsonl}`
 - **Retention:** 365 days (lifecycle policy)
 - **Access:** ACA job writes via managed identity; reporter reads via same.
 
-### 8.3 Telemetry (App Insights)
+### 9.3 Telemetry (App Insights)
 - **Custom metric:** `mua.eval.score`
   - Dimensions: `run_id`, `retiring_model`, `candidate_model`, `candidate_version`, `evaluator`, `deployment_type`, `region`
   - Value: numeric score
 - **Custom event:** `mua.run.completed` with properties for run duration, cost estimate, verdict
 - **Traces:** structured JSON logs from orchestrator + ACA job, correlated by `run_id`
 
-### 8.4 Reports (Git-tracked)
+### 9.4 Reports (Git-tracked)
 - `docs/reports/YYYY-MM-DD-<retiring_model>.md` — human-readable, PR'd
 - `docs/reports/index.md` — auto-updated table of contents
 
 ---
 
-## 9. Configuration schema — the fork-and-configure surface
+## 10. Configuration schema — the fork-and-configure surface
 
 ### `config/models.yaml`
 ```yaml
@@ -524,7 +712,7 @@ AZURE_ACA_EVAL_JOB=aca-mua-eval
 
 ---
 
-## 10. Auth model — OIDC federated identity
+## 11. Auth model — OIDC federated identity
 
 ### Setup steps (in `scripts/bootstrap.ps1` and `docs/oidc-setup.md`)
 1. Create App Registration `sp-mua-<env>` in the consumer's tenant.
@@ -548,7 +736,7 @@ The Bicep `rbac.bicep` module encodes all of this. Bootstrap script only needs t
 
 ---
 
-## 11. Report format (sample skeleton)
+## 12. Report format (sample skeleton)
 
 ```markdown
 # Model Upgrade Report — gpt-4.1 → replacement candidates
@@ -587,7 +775,7 @@ request, 4× larger max output, extended training data.
 
 ---
 
-## 12. Cost estimate — per weekly run
+## 13. Cost estimate — per weekly run
 
 Assumptions: 1 retiring model, 3 candidates, 25-row dataset, 10 red-team probes each.
 
@@ -605,7 +793,7 @@ Persistent-infra baseline: ~$30–$90/month (VNet + private endpoints ~$15, ACA 
 
 ---
 
-## 13. Phased implementation roadmap
+## 14. Phased implementation roadmap
 
 ### v0.1 — MVP (2 weeks)
 - Detector reads Foundry retirement doc + parses tables
@@ -652,22 +840,26 @@ Persistent-infra baseline: ~$30–$90/month (VNet + private endpoints ~$15, ACA 
 
 ---
 
-## 14. Open items for the implementer
+## 15. Open items for the implementer
 
 These are decisions the implementing agent should make in-flight, not blockers for starting:
 
-1. **Foundry doc parsing library.** Consider `markdown-it-py` + custom table extractor. If schema drifts, fall back to a hand-tuned regex-based parser with a snapshot test.
-2. **Pricing scraper.** Because prices are rendered dynamically, either use Playwright in a container (heavy) or scrape the JSON API the pricing page calls (lighter — reverse-engineer from network tab). Recommend the latter.
-3. **ACA job invocation from GHA.** Use `az containerapp job start` (simple) with `--wait` for polling, or the ARM `POST /start` + custom polling loop. Prefer `az` CLI for readability.
-4. **Cost cap enforcement.** MVP: soft cap via config, warn in logs. v1.0: integrate `azure-mgmt-costmanagement` to hard-abort a run if projected cost exceeds cap.
-5. **Multi-tenant / multi-project.** Not in scope for v1.0. If needed later, factor out a `config/matrix.yaml` and iterate the workflow over rows.
-6. **Handling models with no listed price** (e.g. `gpt-5.6-*` today). Score them with a `pricing_unavailable` penalty and note in the report; skip if `require_pricing: true`.
-7. **Dataset rotation.** Consider a scheme where multiple JSONLs can be swapped in as "eval suites" and the report shows scores per suite.
-8. **Private endpoint DNS verification.** Ship a `scripts/validate-networking.py` that the bootstrap process runs to confirm the ACA subnet resolves Foundry's private endpoint IP (not the public one). Fail-fast on misconfig.
+1. **ARM Models API version drift.** Pin `api-version=2025-06-01` and include contract tests that fail loudly if the response schema drifts. When Microsoft releases a newer version, don't auto-upgrade — the schema changes need review.
+2. **Pricing API SKU-name matching library.** The `skuName` field (e.g. `gpt 4.1 Inp regnl`, `o1 1217 Inp glbl`) has no formal schema. Build the regex library incrementally in a shared `pricing/sku_patterns.py` and have the `pricing_client` log all unmatched SKUs to a special Blob path. A weekly job reviews unmatched entries and adds patterns. Start with observed patterns: `{model} {version?} {Inp|Outp|cached Inp|Batch Inp|Batch Outp} {glbl|Data Zone|rgnl|ptu|Batch}`.
+3. **Foundry doc parsing library.** `markdown-it-py` + custom table extractor for the `Replacement` column + `models-sold-directly-by-azure.md` capability tables. Fetch from raw GitHub URL, NOT the rendered learn.microsoft.com HTML. Snapshot-test the parser against a captured doc.
+4. **HuggingFace fallback caching.** HF returns 429 quickly. Cache aggressively (24h) in Blob; on rate-limit fail gracefully — the recommender should be able to score with `context_window: unknown` (drops that dimension for that candidate).
+5. **ACA job invocation from GHA.** Use `az containerapp job start` with `--wait` for simple polling, or ARM `POST /start` + custom polling loop for finer control. Prefer `az` CLI for readability.
+6. **Cost cap enforcement.** MVP: soft cap via config, warn in logs. v1.0: integrate `azure-mgmt-costmanagement` to hard-abort a run if projected cost exceeds cap.
+7. **Multi-tenant / multi-project.** Not in scope for v1.0. If needed later, factor out a `config/matrix.yaml` and iterate the workflow over rows.
+8. **Handling models with no listed price** (observed: gpt-5.1 was not in Retail Prices API as of July 2026 — likely lag or non-standard meter name). Score them with a `pricing_unavailable` penalty. If `require_pricing: true`, drop the candidate.
+9. **Dataset rotation.** Consider a scheme where multiple JSONLs can be swapped in as "eval suites" and the report shows scores per suite.
+10. **Private endpoint DNS verification.** Ship a `scripts/validate-networking.py` that the bootstrap process runs to confirm the ACA subnet resolves Foundry's private endpoint IP (not the public one). Fail-fast on misconfig.
+11. **Sample-response fixtures.** Before shipping MVP, capture live-response fixtures for each API against a known-good model (e.g., gpt-5.1) and check them into `tests/fixtures/`. This gives contract tests something concrete to assert against.
+12. **Undocumented `capabilities` dict keys.** Log all keys seen in the ARM API `model.capabilities` dict to a special Blob path per run. Manually review monthly to discover new fields (like `contextWindow` if MSFT formalizes it) and update the parser.
 
 ---
 
-## 15. Success criteria
+## 16. Success criteria
 
 The system is a success when:
 
@@ -680,7 +872,7 @@ The system is a success when:
 
 ---
 
-## 16. Explicit prerequisites for a consumer fork
+## 17. Explicit prerequisites for a consumer fork
 
 Consumer must already have (or the template's `bootstrap.ps1` provisions):
 - An Azure subscription with quota for Foundry hub
@@ -697,7 +889,7 @@ Consumer does **not** need:
 
 ---
 
-## 17. Alignment with `sohamda/azure-ai-redteam-eval`
+## 18. Alignment with `sohamda/azure-ai-redteam-eval`
 
 To keep mental model consistent, this repo **deliberately reuses**:
 - `azure-ai-evaluation` SDK for evaluators
@@ -719,7 +911,7 @@ To keep mental model consistent, this repo **deliberately reuses**:
 
 ---
 
-## 18. Handoff to the implementing agent
+## 19. Handoff to the implementing agent
 
 **Recommended order of work:**
 1. Bicep `infra/` (v0.1 subset: RG, Foundry, storage, ACA env, RBAC)

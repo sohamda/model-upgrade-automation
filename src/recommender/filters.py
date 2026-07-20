@@ -34,4 +34,12 @@ def filter_candidates(
             or target.replacement_family in item.replacement_families
             or item.model_id == target.replacement_family
         ]
+
+    # Never recommend the retiring model back to itself: the same model_id and
+    # version is not a migration. Same-family or newer versions remain eligible.
+    filtered = [
+        item
+        for item in filtered
+        if not (item.model_id == target.model_id and item.version == target.current_version)
+    ]
     return filtered

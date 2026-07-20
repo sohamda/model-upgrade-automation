@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
-import subprocess
 
 from src.provisioner.deployment_plan import build_provision_request, build_teardown_plan
 from src.provisioner.models import ProvisionPlanResult
+from src.shared.az_cli import resolve_az, run_az
 from src.shared.config import AppConfig
 from src.shared.contracts import CandidateRank, RetiringTarget
 from src.shared.errors import DependencyUnavailableError
@@ -47,49 +47,52 @@ def execute_provisioning_mvp(
     if not enabled:
         return {"status": "skipped", "reason": "provisioning disabled by safety gate"}
 
+    # Resolve az once up front so a genuinely missing CLI aborts the whole
+    # operation (preserving the fallback-to-fixtures contract) instead of being
+    # recorded as a per-deployment failure.
+    resolve_az()
+
     operations: list[dict[str, object]] = []
     for request in plan.provision_requests:
-        command = [
-            "az",
-            "cognitiveservices",
-            "account",
-            "deployment",
-            "create",
-            "--name",
-            run_context.foundry_account_name,
-            "--resource-group",
-            run_context.resource_group,
-            "--deployment-name",
-            request.deployment_name,
-            "--model-name",
-            request.candidate_model_id,
-            "--model-version",
-            request.candidate_version,
-            "--model-format",
-            "OpenAI",
-            "--sku-capacity",
-            "1",
-            "--sku-name",
-            request.deployment_type,
-            "--only-show-errors",
-        ]
         try:
-            completed = subprocess.run(command, capture_output=True, text=True, check=True)
+            stdout = run_az(
+                [
+                    "cognitiveservices",
+                    "account",
+                    "deployment",
+                    "create",
+                    "--name",
+                    run_context.foundry_account_name,
+                    "--resource-group",
+                    run_context.resource_group,
+                    "--deployment-name",
+                    request.deployment_name,
+                    "--model-name",
+                    request.candidate_model_id,
+                    "--model-version",
+                    request.candidate_version,
+                    "--model-format",
+                    "OpenAI",
+                    "--sku-capacity",
+                    "1",
+                    "--sku-name",
+                    request.deployment_type,
+                    "--only-show-errors",
+                ]
+            )
             operations.append(
                 {
                     "deployment_name": request.deployment_name,
                     "status": "created",
-                    "stdout": completed.stdout.strip(),
+                    "stdout": stdout.strip(),
                 }
             )
-        except FileNotFoundError as error:
-            raise DependencyUnavailableError("Azure CLI is required for provisioning execution.") from error
-        except subprocess.CalledProcessError as error:
+        except DependencyUnavailableError as error:
             operations.append(
                 {
                     "deployment_name": request.deployment_name,
                     "status": "failed",
-                    "stderr": error.stderr.strip(),
+                    "stderr": str(error),
                 }
             )
 

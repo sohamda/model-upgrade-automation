@@ -1,3 +1,5 @@
+use_official_sources: false
+
 watch_list:
   - model_id: gpt-4.1-mini
     current_version: '2025-04-14'

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import subprocess
 
+from src.shared.az_cli import run_az
 from src.shared.errors import DependencyUnavailableError
 from src.shared.run_context import RunContext
 
@@ -12,33 +12,23 @@ from src.shared.run_context import RunContext
 def discover_foundry_deployments(run_context: RunContext) -> list[dict[str, str]]:
     """Discover model deployments from Azure Cognitive Services account."""
 
-    command = [
-        "az",
-        "cognitiveservices",
-        "account",
-        "deployment",
-        "list",
-        "--name",
-        run_context.foundry_account_name,
-        "--resource-group",
-        run_context.resource_group,
-        "--output",
-        "json",
-    ]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-    except FileNotFoundError as error:
-        raise DependencyUnavailableError(
-            "Azure CLI is not installed. Install az CLI to use --discover-from-azure mode."
-        ) from error
-    except subprocess.CalledProcessError as error:
-        raise DependencyUnavailableError(
-            "Failed to discover Foundry deployments via Azure CLI. "
-            f"stderr: {error.stderr.strip()}"
-        ) from error
+    stdout = run_az(
+        [
+            "cognitiveservices",
+            "account",
+            "deployment",
+            "list",
+            "--name",
+            run_context.foundry_account_name,
+            "--resource-group",
+            run_context.resource_group,
+            "--output",
+            "json",
+        ]
+    )
 
     try:
-        payload = json.loads(result.stdout)
+        payload = json.loads(stdout)
     except json.JSONDecodeError as error:
         raise DependencyUnavailableError(
             "Azure CLI returned invalid JSON while discovering deployments."

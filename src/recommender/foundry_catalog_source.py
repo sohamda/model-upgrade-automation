@@ -12,7 +12,7 @@ from src.recommender.models import CatalogCandidate
 from src.shared.errors import DependencyUnavailableError
 
 LEARN_MODELS_URL: Final[str] = (
-    "https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure"
+    "https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs-pr/live/articles/foundry/foundry-models/concepts/models-sold-directly-by-azure.md"
 )
 
 

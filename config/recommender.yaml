@@ -4,4 +4,4 @@ weights:
   cost: 0.2
 hard_filters:
   require_same_region: false
-  require_supported_deployment_type: true
+  require_supported_deployment_type: false

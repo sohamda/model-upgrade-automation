@@ -1,5 +1,57 @@
 # Scribe History
 
+## Decision #30 Recorded: Adopt Cached-Benchmark Design for Quality/Safety Scoring (2026-07-20T11:40:00Z)
+
+**Operation**: Record decision #30 + research dispatch history + consumption + state increment
+
+**Dispatch Summary**:
+- **Dispatch A** (Task Researcher): Research + design for evaluation-driven quality/safety source (completed)
+- **Dispatch B** (Scribe): Record decision + research dispatch history, update consumption ledger, increment state
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended: "Adopt Cached-Benchmark Design for Real Quality/Safety Scoring (#30)" decision entry
+- `.copilot-tracking/squad/history/task-researcher.md` — Created with initial entry: research dispatch + consumption block
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→54 (+2), decisionCount→30 (+1), estCostUsd→1.66496 (+0.01952), estCreditsTotal→166.496 (+1.952)
+- `.copilot-tracking/squad/consumption.md` — Rewritten: per-role ledger with Task Researcher (tier-1, 6000+3400 tokens, $0.0184) and Scribe (tier-1, 1400+600 tokens, $0.00352) consumption blocks appended to run total
+
+**Consumption Blocks Written**:
+- `.copilot-tracking/squad/history/task-researcher.md` — Dispatch A consumption block (tier-default, 6000 input + 3400 output, $0.0184 USD, 1.84 credits, basis: tier-default)
+- `.copilot-tracking/squad/history/scribe.md` — Dispatch B consumption block (tier-default, 1400 input + 600 output, $0.00352 USD, 0.352 credits, basis: tier-default)
+
+**Per-Dispatch Consumption**:
+- Task Researcher (fast/haiku tier): 6000 input × $0.80/MTok + 3400 output × $4.00/MTok = (4.80 + 13.60) / 1e6 = $0.0184 USD
+- Scribe (fast/haiku tier): 1400 input × $0.80/MTok + 600 output × $4.00/MTok = (1.12 + 2.40) / 1e6 = $0.00352 USD
+
+**Run Totals Updated**:
+- dispatchCount: 52 → 54 (+2)
+- decisionCount: 29 → 30 (+1)
+- estCostUsd: $1.64304 → $1.66496 (+$0.01952)
+- estCreditsTotal: 164.304 → 166.496 (+1.952)
+
+**Status**: ✓ Complete
+
+**Next Steps**: Squad ready for Phase 1 implementation (quality_safety_source.py module + cache schema) pending task-group sequencing. Research artifact available at `.copilot-tracking/research/20260720-quality-safety-eval-source.md`.
+
+---
+
+## Consumption Block: Decision #30 Recording Dispatch
+
+**Dispatch**: Squad Scribe — Record decision #30 + research dispatch history + consumption + state increment
+
+**Consumption**: claude-3-haiku (tier-1 / fast)
+- Input tokens: 1400 (estimated, tier-default)
+- Cached tokens: 0
+- Output tokens: 600 (estimated, tier-default)
+- Input rate: $0.80 / MTok
+- Output rate: $4.00 / MTok
+- Est. cost USD: 0.00352
+- Est. credits: 0.352
+- Basis: tier-default
+
+**Status**: ✓ Recorded
+
+---
+
 ## Initialization Record (2026-07-15)
 
 **Operation**: Squad state initialization
@@ -101,6 +153,98 @@
 
 ---
 
+## Core Pipeline: Official-Source Usage Activation State Update (2026-07-20T00:00:00Z)
+
+**Operation**: Record Python Delivery Lead (Kenny) dispatch for core pipeline official-source activation; persist decision entry; append dispatch history; update consumption ledger and state counters.
+
+**Dispatch Summary**:
+- **Dispatch A**: Task Implementor → Kenny (Python Delivery Lead) — Core Pipeline Official-Source Usage Activation
+  - Request: Activate official-source usage by default in pipeline runtime. Implement configuration-level default (`sources.official.enabled: true`), runtime override mechanism, and resilient fallback wrappers in detector/recommender sources. Update source URLs to raw GitHub markdown official docs endpoints. Add tests proving source selection and fallback behavior.
+  - Context: Prior pipeline design defaulted to fixture-only sources for MVP validation. User requirements specify recommendations must account for official source information (documented model retirement schedules, official foundation model catalog). Live-mode implementation enabled optional Foundry discovery/catalog, but fixtures remained default. This dispatch elevates official sources to primary (default) while maintaining graceful fallback to fixtures on failure.
+  - Output: Updated configuration (`config/models.yaml`, `tests/fixtures/hermetic_repo/config/models.yaml`), enhanced config validator (`src/shared/config.py`), updated pipeline runtime (`src/orchestrator/pipeline.py`), resilient source implementations (`src/detector/retirement_schedule_source.py`, `src/recommender/foundry_catalog_source.py`), comprehensive test coverage (3 test files with 8 new/updated tests)
+  - Validation: ✓ Configuration load: `sources.official.enabled: true` confirmed as default; ✓ Runtime instantiation: official sources instantiated as primary; ✓ Live source execution: mock Foundry API calls succeed; ✓ Fallback resilience: simulated Foundry failures trigger automatic fallback to fixture sources; ✓ Test command execution: 8 tests passed; ✓ Logging validation: fallback events logged with reason; ✓ Contract surfaces: all detector/recommender/pipeline contracts validated
+  - Consumption: 8,500 input + 2,600 output tokens (claude-3-5-sonnet default tier) = $0.0645 → 6.45 credits
+
+- **Dispatch B**: Scribe → Record decision + dispatch history + update state
+  - Request: Persist Core Pipeline official-source activation decision entry; append dispatch A history with consumption block; update state.json counters (dispatchCount +1, decisionCount +1); recalculate consumption ledger; persist aggregated run totals.
+  - Consumption: 2,200 input + 700 output tokens (claude-3-haiku tier-1) = $0.00456 → 0.456 credits
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended: "Core Pipeline: Official-Source Usage Activation (2026-07-20T00:00:00Z)" decision entry (new decision 24)
+- `.copilot-tracking/squad/history/task-implementor.md` — Appended: Dispatch A (Kenny official-source activation) + consumption block (new dispatch 42)
+- `.copilot-tracking/squad/history/scribe.md` — Appended: Dispatch B (this Scribe state update) + consumption block (new dispatch 43)
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→43, decisionCount→24, estCostUsd→1.321, estCreditsTotal→132.1
+- `.copilot-tracking/squad/consumption.md` — Rewritten: per-role ledger with official-source activation turn token counts; run totals updated to reflect new estimated costs
+
+**Status**: ✓ Complete
+
+**Consumption Block**:
+```
+model: unknown
+model_tier: fast
+input_tokens: 2200
+cached_tokens: 0
+output_tokens: 700
+input_rate: 0.80
+cached_rate: 0.08
+output_rate: 4.00
+est_cost_usd: 0.00456
+est_credits: 0.456
+basis: tier-default
+```
+
+**Next Steps**: Core pipeline now activates official sources by default with graceful fallback to fixtures. Official-source usage integrated across detector (retirement schedule), recommender (catalog fetch), and orchestrator (source routing). Fallback mechanism proven operational. Ready for: (A) post-delivery hardening (timeout recovery, multi-region failover), (B) Azure live-mode validation (production provisioning + evaluation), or (C) next implementation turn.
+
+---
+
+## Core Pipeline — Real Official REST API Integration (ARM Models API + Retail Prices) State Update (2026-07-20T23:30:00Z)
+
+**Operation**: Record Python Delivery Lead (Kenny) dispatch for high-value ARM Models API + Retail Prices API integration; persist decision entry with high architectural significance; append dispatch history; update consumption ledger and state counters.
+
+**Dispatch Summary**:
+- **Dispatch A**: Task Implementor → Kenny (Python Delivery Lead) — Core Pipeline: Real Official REST API Integration (ARM Models API + Retail Prices)
+  - Request: Implement high-value official REST API integration slice: ARM Models API for model lifecycle/retirement data and Azure Retail Prices API for real-time pricing. Zero-heavy-dependency implementation strategy (az-rest-subprocess + stdlib urllib). Hermetic mocked tests only.
+  - Context: User asserted the codebase is not useful without real APIs; user unavailable, instructed to proceed autonomously. Autonomous scoping resolved to implement highest-value slice: ARM Models API (authoritative model retirement and metadata) + Azure Retail Prices API (real cost data for scoring). Chose az-rest-subprocess for ARM auth (preserves Azure SDK dependency baseline) and stdlib urllib for public pricing (preserves zero-heavy-dependency convention). Classification: Core pipeline / Detector / Recommender / Orchestrator. Resolved role: Python Delivery Lead (Kenny). Autonomy: confirm (proceeded autonomously per explicit user instruction).
+  - Output: 6 files created (ArmModelsRetirementSource, ArmModelsCatalogSource, RetailPricesClient, 3 test files), 2 files modified (pipeline.py with 3-tier fallback chains, test_pipeline_runtime_gates.py with ARM integration validation)
+  - Fallback Chain Architecture: Retirement detection (ARM API → Learn markdown → fixture YAML); Catalog discovery (ARM API → Learn markdown → fixture YAML); graceful degradation enabled at each tier
+  - Design Rationale: Zero-heavy-dependency preserved (no azure-identity/azure-mgmt SDKs; ARM auth via az-rest-subprocess; pricing via stdlib urllib); Hermetic testing only (all tests use mocked HTTP responses, no live calls); Fallback resilience (each source wraps fetch in try-catch, cascades on DependencyUnavailableError); Deferred wiring documented (RetailPricesClient implemented/tested but not yet consumed by cost_score)
+  - Validation: ✓ Full test suite: 49 passed; ✓ ARM Models API source tests pass (mocked HTTP); ✓ ARM Catalog source tests pass (mocked HTTP); ✓ Pricing client tests pass (mocked HTTP); ✓ Pipeline integration: fallback chain behavior validated; ✓ All tests hermetic (no live API calls); ✓ Fallback logic verified (simulated ARM API failures trigger cascade to Tier 2/3)
+  - Architectural Significance: High — Detection and candidate discovery now use authoritative live ARM data by default, with resilient degradation to Learn docs and fixtures on failure. Pricing data foundation established for next turn (cost_score wiring). Enables production-grade recommendation confidence and cost accuracy.
+  - Consumption: 14,000 input + 5,200 output tokens (claude-3-5-sonnet default tier) = $0.12 → 12.00 credits
+
+- **Dispatch B**: Scribe → Record decision + dispatch history + update state
+  - Request: Persist Core Pipeline Real Official REST API Integration decision entry (high architectural significance); append dispatch A history with consumption block to task-implementor.md; append this Scribe dispatch history with consumption block to scribe.md; update state.json counters (dispatchCount +2, decisionCount +1); recalculate consumption ledger; persist aggregated run totals.
+  - Consumption: 2,600 input + 800 output tokens (claude-3-haiku tier-1) = $0.00544 → 0.544 credits
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended: "Core Pipeline: Real Official REST API Integration (ARM Models API + Retail Prices) (2026-07-20T23:30:00Z)" decision entry with architectural-significance marker (new decision 26)
+- `.copilot-tracking/squad/history/task-implementor.md` — Appended: Dispatch A (Kenny ARM/Retail Prices integration) + consumption block (new dispatch 46)
+- `.copilot-tracking/squad/history/scribe.md` — Appended: Dispatch B (this Scribe state update) + consumption block (new dispatch 47)
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→47, decisionCount→26, estCostUsd→1.58532, estCreditsTotal→158.532
+- `.copilot-tracking/squad/consumption.md` — Rewritten: per-role ledger with ARM/Retail Prices integration turn token counts; run totals updated to reflect new estimated costs
+
+**Status**: ✓ Complete
+
+**Consumption Block**:
+```
+model: unknown
+model_tier: fast
+input_tokens: 2600
+cached_tokens: 0
+output_tokens: 800
+input_rate: 0.80
+cached_rate: 0.08
+output_rate: 4.00
+est_cost_usd: 0.00544
+est_credits: 0.544
+basis: tier-default
+```
+
+**Next Steps**: Core pipeline now integrates authoritative ARM Models API and Azure Retail Prices API with 3-tier fallback chains (official → Learn docs → fixtures). All 49 unit tests pass; fallback resilience validated. Pricing data foundation in place for next turn (cost_score wiring to RetailPricesClient). Ready for: (A) cost_score integration (consume pricing client in ranking), (B) post-delivery hardening (timeout recovery, retry logic, multi-region failover), or (C) Azure live-mode validation (production ARM auth + real API endpoints).
+
+
+---
+
 ## 2026-07-17 Status Check — User context clarification
 
 **Request**: User status check — "where are we? i think we were trying to fix ci pipeline run"
@@ -153,6 +297,116 @@
 
 **Artifacts Written**:
 - `.copilot-tracking/squad/decisions.md` — Appended: "TG4 Core Pipeline: First Execution Slice Start & Shared Contracts + Detector + Minimal Orchestrator (2026-07-15T16:00:00Z)" decision entry with full dispatch rationale
+
+---
+
+## API Audit Turn: Runtime Usage Recording (2026-07-20T00:00:00Z)
+
+**Operation**: Record API audit decision and Task Researcher dispatch history; update consumption ledger with tier-default estimates.
+
+**Dispatch Summary**:
+- **Dispatch A**: Task Researcher → Audit runtime API usage across core pipeline
+  - Request: Classify actual API usage (used now, declared-but-unused, fallback behavior) against requirements/plan.md
+  - Output: Detailed findings on 3 active APIs (raw markdown retirement schedule, raw markdown model catalog, Container Apps deployments) and 6 declared-but-unused APIs (ARM Models, Azure OpenAI data-plane, Retail Prices, HF model API, HF leaderboard, Resource SKUs)
+  - Validation: ✓ Source code inspection clean; 8 unit tests pass (official-source activation, fallback coverage)
+  - Consumption: 3200 input + 1400 output tokens (claude-3-haiku fast tier, no model provided) = $0.00816 → 0.816 credits
+
+- **Dispatch B**: Scribe (this entry) → Record decision + dispatch history + update state
+  - Request: Persist API audit decision, record dispatch A history with tier-default consumption estimate, update state.json counters and estimated costs, recalculate consumption ledger
+  - Consumption: 1200 input + 500 output tokens (claude-3-haiku fast tier, no model provided) = $0.00296 → 0.296 credits
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended: "Core Pipeline Audit: Runtime API Usage vs. Official-Source Configuration (2026-07-20T00:00:00Z)" decision entry (new decision 25)
+- `.copilot-tracking/squad/history/task-researcher.md` — Appended: Dispatch A (API audit) + consumption block (new dispatch 44)
+- `.copilot-tracking/squad/consumption.md` — Rewritten: per-role ledger reflecting API audit turn consumption
+- `.copilot-tracking/squad/consumption-rates.md` — Seeded: claude-3-haiku rate table (first real population, from template)
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→45, decisionCount→25, estCostUsd→1.32312, estCreditsTotal→133.216
+
+**Status**: ✓ Complete
+
+**Consumption Block**:
+```
+model: claude-3-haiku
+model_tier: fast
+input_tokens: 1200
+cached_tokens: 0
+output_tokens: 500
+input_rate: 0.80
+cached_rate: 0.00
+output_rate: 4.00
+est_cost_usd: 0.00296
+est_credits: 0.296
+basis: tier-default
+```
+
+**Next Steps**: Core pipeline API surface now audited. Declared-but-unused APIs documented for future roadmap. Fallback behavior verified operational. Ready for: (A) continued live-mode Azure integration, (B) TG5 evaluation engine delivery, or (C) next audit/validation turn.
+
+---
+
+## ARM Catalog + Windows az Resolution Turn (2026-07-20T23:59:00Z)
+
+**Operation**: Record two Task Implementor dispatches (ARM catalog chat-gate fix + Windows az resolution fix) and Scribe decision capture for Decisions #28 and #29.
+
+**Dispatch Summary**:
+
+- **Dispatch A**: Task Implementor → Kenny (Python Delivery Lead) — ARM catalog real-successors fix
+  - Request: Fix ARM catalog source to surface genuine chat-capable GA model successors for any retiring model target. Root cause: replacement_families hardcoding rejected non-gpt-4.1 targets.
+  - Output: 
+    - `src/recommender/arm_catalog_source.py` — Added chat-capability gate (capabilities.chatCompletion == "true"), removed replacement_families hardcoding (now empty []), kept GA/Stable lifecycle filter
+    - `src/recommender/filters.py` — Added self-exclusion: candidate with same model_id AND version as retiring target is skipped
+    - `tests/unit/test_arm_catalog_source.py` — Updated mock/live tests for non-gpt-4.1 targets
+    - `tests/unit/test_filters.py` (new) — Self-exclusion tests
+  - Validation: ✓ 63 tests pass (51 prior + 12 ARM catalog + self-exclusion); live: gpt-4o@2024-11-20 now matches gpt-5.1 v2025-11-13 (score 0.88); chat-capability filter verified; embeddings/audio excluded
+  - Consumption: 5200 input + 3000 output tokens (claude-3-5-sonnet default tier) = $0.0606 → 6.06 credits
+
+- **Dispatch B**: Task Implementor → Kenny (Python Delivery Lead) — Windows az executable resolution fix
+  - Request: Root-cause fix for Windows subprocess.run(["az",...]) FileNotFoundError [WinError 2]. On Windows, az is a .cmd batch file; subprocess without shell=True cannot resolve PATHEXT.
+  - Output:
+    - `src/shared/az_cli.py` (new) — resolve_az() + run_az(args, timeout); uses shutil.which("az") to locate concrete path; no shell=True
+    - `src/recommender/arm_catalog_source.py` — Removed direct subprocess.run; now uses run_az()
+    - `src/detector/arm_models_source.py` — Removed direct subprocess.run; now uses run_az()
+    - `src/detector/deployed_introspector.py` — Removed direct subprocess.run; now uses run_az()
+    - `src/provisioner/service.py` — Removed direct subprocess.run; now uses run_az()
+    - `tests/unit/test_az_cli.py` (new) — 6 tests for resolve_az/run_az paths, timeout handling, error mapping
+    - Hermetic patches in 4 existing test modules
+  - Validation: ✓ 69 tests pass (63 prior + 6 az_cli tests); live Windows gpt-4o run: reached ARM catalog, returned gpt-5.1 and other candidates (no FileNotFoundError); no shell=True in resolved paths; fallback-to-fixtures unchanged when az is absent
+  - Consumption: 5600 input + 3200 output tokens (claude-3-5-sonnet default tier) = $0.0648 → 6.48 credits
+
+- **Dispatch C**: Scribe → Record Decisions #28 & #29 + append history + update state
+  - Request: Persist two new decisions (ARM catalog chat-gate fix, Windows az resolution fix), record both Task Implementor dispatches with consumption blocks, update state.json counters and estimated costs, recalculate consumption ledger
+  - Output: Updated `.copilot-tracking/squad/decisions.md` (Decisions #28 + #29), appended `.copilot-tracking/squad/history/task-implementor.md` (Dispatches A + B), appended `.copilot-tracking/squad/history/scribe.md` (this entry), updated `.copilot-tracking/squad/state.json`, updated `.copilot-tracking/squad/consumption.md`, updated `/memories/repo/squad-task-implementor.md`
+  - Consumption: 1800 input + 800 output tokens (claude-3-haiku fast tier) = $0.00464 → 0.464 credits
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended: Decision #28 (ARM catalog chat-gate fix), Decision #29 (Windows az resolution fix)
+- `.copilot-tracking/squad/history/task-implementor.md` — Appended: Dispatch A (chat-gate fix) + consumption block, Dispatch B (az resolution fix) + consumption block
+- `.copilot-tracking/squad/history/scribe.md` — Appended: This entry with Dispatch C consumption block
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→52 (49 + 3), decisionCount→29 (27 + 2), estCostUsd→1.64304, estCreditsTotal→164.304
+- `.copilot-tracking/squad/consumption.md` — Rewritten: per-role ledger with Task Implementor row updated (new tokens + costs)
+- `/memories/repo/squad-task-implementor.md` — Updated: durable note on Windows az.cmd/shutil.which gotcha and ARM catalog chat-gate + empty-families design
+
+**Decision References**:
+- Decision #28: `.copilot-tracking/squad/decisions.md#decision-28-live-arm-catalog-surfaces-real-chat-successors-for-any-retiring-model-2026-07-20t235500z`
+- Decision #29: `.copilot-tracking/squad/decisions.md#decision-29-windows-az-executable-resolution--root-cause-fix-closes-subprocess-fileerror-2026-07-20t235800z`
+
+**Status**: ✓ Complete
+
+**Consumption Block**:
+```
+model: claude-3-haiku
+model_tier: fast
+input_tokens: 1800
+cached_tokens: 0
+output_tokens: 800
+input_rate: 0.80
+cached_rate: 0.00
+output_rate: 4.00
+est_cost_usd: 0.00464
+est_credits: 0.464
+basis: tier-default
+```
+
+**Next Steps**: Live ARM catalog now works for any retiring model on any platform (Windows az resolution fixed). Ranking-driven successor selection (no hardcoded families). Ready for: (A) next official-source integration (HuggingFace API, Resource SKUs meterId join), (B) TG5 evaluation engine delivery, or (C) continued live-mode validation.
 - `.copilot-tracking/squad/history/task-planner.md` — Created: Dispatch A (planning) record + consumption block
 - `.copilot-tracking/squad/history/task-implementor.md` — Created: Dispatch B (implementation) record + consumption block
 - `.copilot-tracking/squad/state.json` — Updated: dispatchCount→19, decisionCount→8, estCostUsd→0.645146, estCreditsTotal→64.554
@@ -359,3 +613,51 @@
 **Purpose**: This checkpoint establishes a reference point for squad state after recent git push and confirms all dispatch counters, cost estimates, and decision records are synchronized across tracking artifacts.
 
 **Next Steps**: Squad state fully reconciled and ready for continued task execution or handoff to next phase.
+
+## Dispatch: Squad Scribe — Record decision #27 and dispatch history with consumption (2026-07-20T23:52:00Z)
+
+**Operation**: Persist squad state for completed pricing-into-scoring integration turn.
+
+**Dispatch Summary**:
+- **Dispatch A**: Task Implementor (Kenny) — Wire RetailPricesClient into recommender cost scoring
+  - Request: Implement pricing enrichment layer (pricing_enrichment.py), integrate into service, extend pipeline, add 8 tests
+  - Output: 1 new module + 2 new test modules + 3 modified modules; 57/57 tests passing
+  - Consumption: 4200 input + 2600 output tokens (claude-3-5-sonnet default tier)
+
+- **Dispatch B**: Scribe (this entry) → Record decision + dispatch history + update consumption ledger
+  - Request: Append decision #27 (pricing integration) and dispatch A history to decisions.md and history/task-implementor.md; update consumption.md ledger; increment state.json counters
+  - Consumption: 1500 input + 700 output tokens (claude-3-haiku tier-1)
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended: Decision #27 "Wire RetailPricesClient into recommender cost scoring (2026-07-20T23:50:00Z)"
+- `.copilot-tracking/squad/history/task-implementor.md` — Appended: Dispatch A + consumption block
+- `.copilot-tracking/squad/history/scribe.md` — Appended: Dispatch B + consumption block (this entry)
+- `.copilot-tracking/squad/consumption.md` — Rewritten: Added both dispatches to per-role ledger; updated run totals
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→49, decisionCount→27, estCostUsd→1.513, estCreditsTotal→151.70
+
+**Consumption Computation**:
+- **Dispatch A (Task Implementor)**:
+  - Model: unknown (tier-default = claude-3-5-sonnet)
+  - Tokens: 4200 input + 2600 output
+  - Cost: (4200×3.00 + 2600×15.00) / 1M = 0.0516 USD = 5.16 credits
+
+- **Dispatch B (Scribe)**:
+  - Model: unknown (tier-default = claude-3-haiku)
+  - Tokens: 1500 input + 700 output
+  - Cost: (1500×0.80 + 700×4.00) / 1M = 0.004 USD = 0.40 credits
+
+- **Run Totals**:
+  - Prior: dispatchCount=47, decisionCount=26, estCostUsd=1.4574, estCreditsTotal=145.74
+  - New: +0.0516 + 0.004 = +0.0556 USD, +5.56 + 0.40 = +5.96 credits
+  - Final: dispatchCount=49, decisionCount=27, estCostUsd=1.513, estCreditsTotal=151.70
+
+**Repository Memory**: Noted in /memories/repo/squad-task-implementor.md:
+- Pricing integration completed successfully; RetailPricesClient now wired into cost_score computation
+- Cost formula: cost_score = clamp(0..1, 0.5 + 0.5 * (p_r - p_c)/p_r) where p_r=retiring, p_c=candidate
+- Non-blocking graceful degradation: pricing gaps fallback to static catalog values
+- Determinism preserved: fixture/hermetic runs unaffected (price_client=None path)
+- 57 tests passing (49 prior + 6 enrichment + 2 service)
+
+**Status**: ✓ Complete
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#decision-27-wire-retailpricesclient-into-recommender-cost-scoring-2026-07-20t235000z`

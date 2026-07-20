@@ -6,15 +6,22 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
+from src.detector.arm_models_source import ArmModelsRetirementSource
 from src.detector.deployed_introspector import discover_foundry_deployments
 from src.detector.retirement_schedule_source import LearnRetirementScheduleSource
-from src.detector.retirement_source import FixtureRetirementSource, build_default_fixture
+from src.detector.retirement_source import (
+    FixtureRetirementSource,
+    RetirementSource,
+    build_default_fixture,
+)
 from src.detector.service import detect_retiring_targets
 from src.evaluator.service import execute_local_evaluation
 from src.history.manifest_builder import build_history_preview
 from src.provisioner.service import execute_provisioning_mvp, plan_provisioning
-from src.recommender.catalog import FixtureCandidateCatalog, build_default_catalog
+from src.recommender.arm_catalog_source import ArmModelsCatalogSource
+from src.recommender.catalog import CandidateCatalog, FixtureCandidateCatalog, build_default_catalog
 from src.recommender.foundry_catalog_source import LearnFoundryCatalogSource
+from src.recommender.pricing_source import RetailPricesClient
 from src.recommender.service import recommend_candidates
 from src.shared.azure_auth import create_credential_descriptor
 from src.shared.config import AppConfig, RuntimeOptions, load_app_config
@@ -105,19 +112,91 @@ def _stage_dry_run_output(
     }
 
 
-def _resolve_source(repo_root: Path, runtime: RuntimeOptions, fixture_path: Path | None):
+def _should_use_official_sources(config: AppConfig, runtime: RuntimeOptions) -> bool:
     if runtime.live_catalog:
-        return LearnRetirementScheduleSource()
+        return True
+    if runtime.use_official_sources is not None:
+        return runtime.use_official_sources
+    return config.use_official_sources
+
+
+@dataclass(slots=True)
+class _FallbackRetirementSource:
+    primary: RetirementSource
+    fallback: RetirementSource
+
+    def load(self) -> list[RetiringModel]:
+        try:
+            return self.primary.load()
+        except DependencyUnavailableError:
+            return self.fallback.load()
+
+
+@dataclass(slots=True)
+class _FallbackCatalogSource:
+    primary: CandidateCatalog
+    fallback: CandidateCatalog
+
+    def load(self):
+        try:
+            return self.primary.load()
+        except DependencyUnavailableError:
+            return self.fallback.load()
+
+
+def _resolve_source(
+    repo_root: Path,
+    config: AppConfig,
+    runtime: RuntimeOptions,
+    fixture_path: Path | None,
+):
     if fixture_path:
         return FixtureRetirementSource(fixture_path)
+
+    if _should_use_official_sources(config, runtime):
+        # Fallback chain: authoritative ARM Models API -> Learn retirement schedule
+        # -> bundled fixture. Each tier degrades to the next on
+        # DependencyUnavailableError so a runtime always resolves signals.
+        learn_to_fixture = _FallbackRetirementSource(
+            primary=LearnRetirementScheduleSource(),
+            fallback=build_default_fixture(repo_root),
+        )
+        return _FallbackRetirementSource(
+            primary=ArmModelsRetirementSource(
+                subscription_id=config.azure.azure_subscription_id,
+                locations=list(config.azure.allowed_regions),
+            ),
+            fallback=learn_to_fixture,
+        )
+
     return build_default_fixture(repo_root)
 
 
-def _resolve_catalog(repo_root: Path, runtime: RuntimeOptions, catalog_path: Path | None):
-    if runtime.live_catalog:
-        return LearnFoundryCatalogSource()
+def _resolve_catalog(
+    repo_root: Path,
+    config: AppConfig,
+    runtime: RuntimeOptions,
+    catalog_path: Path | None,
+):
     if catalog_path:
         return FixtureCandidateCatalog(catalog_path)
+
+    if _should_use_official_sources(config, runtime):
+        # Fallback chain: authoritative ARM Models API -> Learn Foundry catalog
+        # -> bundled fixture. Each tier degrades to the next on
+        # DependencyUnavailableError so a runtime always resolves candidates.
+        learn_to_fixture = _FallbackCatalogSource(
+            primary=LearnFoundryCatalogSource(),
+            fallback=build_default_catalog(repo_root),
+        )
+        return _FallbackCatalogSource(
+            primary=ArmModelsCatalogSource(
+                subscription_id=config.azure.azure_subscription_id,
+                locations=list(config.azure.allowed_regions),
+            ),
+            fallback=learn_to_fixture,
+        )
+
     return build_default_catalog(repo_root)
 
 
@@ -157,8 +236,8 @@ def execute_dry_run(
     if runtime_options.run_evals and not runtime_options.provision_candidates:
         raise ContractError("--run-evals requires --provision-candidates to be enabled.")
 
-    source = _resolve_source(repo_root, runtime_options, fixture_path)
-    catalog = _resolve_catalog(repo_root, runtime_options, catalog_path)
+    source = _resolve_source(repo_root, config, runtime_options, fixture_path)
+    catalog = _resolve_catalog(repo_root, config, runtime_options, catalog_path)
 
     if runtime_options.discover_from_azure:
         discovered = discover_foundry_deployments(run_context)
@@ -185,8 +264,17 @@ def execute_dry_run(
     }
 
     provision_exec = {"status": "skipped", "reason": "no targets"}
+    # Only consult live Retail Prices when official sources are enabled; hermetic
+    # and fixture runs fall back to static catalog cost scores.
+    price_client = (
+        RetailPricesClient()
+        if _should_use_official_sources(config, runtime_options)
+        else None
+    )
     for target in detector_result.retiring_targets:
-        recommended = recommend_candidates(config, run_context, target, catalog)
+        recommended = recommend_candidates(
+            config, run_context, target, catalog, price_client=price_client
+        )
         top_candidates = recommended.ranked_candidates[: runtime_options.top_k]
         provision_plan = plan_provisioning(config, run_context, target, top_candidates)
         provision_exec = execute_provisioning_mvp(

@@ -13,7 +13,7 @@ from src.shared.contracts import RetiringModel
 from src.shared.errors import DependencyUnavailableError
 
 LEARN_RETIREMENT_URL: Final[str] = (
-    "https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule"
+    "https://raw.githubusercontent.com/MicrosoftDocs/azure-ai-docs-pr/live/articles/foundry/openai/concepts/model-retirement-schedule.md"
 )
 
 

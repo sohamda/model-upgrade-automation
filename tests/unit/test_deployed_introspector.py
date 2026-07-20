@@ -36,8 +36,11 @@ def _run_context() -> RunContext:
 
 
 class DeployedIntrospectorTests(unittest.TestCase):
-    @patch("src.detector.deployed_introspector.subprocess.run")
-    def test_given_cli_json_when_discovering_then_models_are_normalized(self, mock_run) -> None:
+    @patch("shutil.which", return_value="/usr/bin/az")
+    @patch("subprocess.run")
+    def test_given_cli_json_when_discovering_then_models_are_normalized(
+        self, mock_run, _mock_which
+    ) -> None:
         # Arrange
         mock_run.return_value = subprocess.CompletedProcess(
             args=[],

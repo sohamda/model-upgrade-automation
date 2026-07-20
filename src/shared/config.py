@@ -59,6 +59,7 @@ class AppConfig:
     evaluation: EvaluationConfig
     recommender: RecommenderConfig
     azure: AzureEnvironmentConfig
+    use_official_sources: bool
 
 
 @dataclass(slots=True)
@@ -69,6 +70,7 @@ class RuntimeOptions:
     retiring_version: str | None = None
     discover_from_azure: bool = False
     live_catalog: bool = False
+    use_official_sources: bool | None = None
     provision_candidates: bool = False
     run_evals: bool = False
     top_k: int = 3
@@ -219,4 +221,5 @@ def load_app_config(repo_root: Path) -> AppConfig:
         evaluation=evaluation,
         recommender=recommender,
         azure=azure,
+        use_official_sources=bool(models_data.get("use_official_sources", True)),
     )
