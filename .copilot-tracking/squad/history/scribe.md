@@ -34,6 +34,162 @@
 
 ---
 
+## Decision #34 Recorded: Phase 2 Real-Eval Producer Seam + Conftest Env-Isolation (2026-07-22T00:00:00Z)
+
+**Operation**: Record Decision #34 (Phase 2 completion) + RPI pass dispatch history + consumption blocks + state increment
+
+**Dispatch Summary**:
+- **Dispatch A** (Task Researcher): Phase 2 research — eval-client design, formula analysis, scope sequencing
+- **Dispatch B** (Task Planner): Phase 2 planning — implementation plan from research, task breakdown
+- **Dispatch C** (Task Implementor): Phase 2 implementation — eval-client SEAM, stub, refresh script, conftest fixture, testing (coordinator verification: clean/polluted pytest, dry-run smoke)
+- **Dispatch D** (Squad Scribe): Record decision #34, dispatch history, update consumption ledger, increment state
+
+**RPI Pass Summary**: Coordinator ran end-to-end Research → Plan → Implement cycle for Phase 2 (quality/safety offline eval producer + env-isolation conftest). Implementation shipped 8 deliverables: `quality_safety_eval_client.py` (Protocol + stub + import-guarded Foundry), `refresh_quality_safety_benchmarks.py` (local producer), `conftest.py` (autouse env clearing for Decision #33 regression prevention), 2 test files. Coordinator independently verified: clean env 106 tests PASS, polluted env 106 tests PASS (conftest immunity proven), dry-run smoke test, runtime import isolation. Backward-compat maintained: consumer contract unchanged, zero new heavy runtime deps.
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended Decision #34 entry with Phase 2 summary, locked decisions, shipped files, guardrails, coordinator verification, follow-on work
+- `.copilot-tracking/squad/history/researcher.md` — Created: Phase 2 research dispatch + consumption block (tier-default, 6000 input + 3500 output, $0.0705 USD, 7.05 credits)
+- `.copilot-tracking/squad/history/planner.md` — Created: Phase 2 planning dispatch + consumption block (tier-default, 5000 input + 2500 output, $0.0525 USD, 5.25 credits)
+- `.copilot-tracking/squad/history/implementer.md` — Created: Phase 2 implementation dispatch + coordinator verification + consumption block (tier-default, 7000 input + 4000 output, $0.081 USD, 8.1 credits)
+- `.copilot-tracking/squad/history/scribe.md` — Appended: this summary entry
+- `.copilot-tracking/squad/consumption.md` — Rewritten: per-role ledger with Phase 2 dispatches, run totals, cost comparison
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→63 (+4), decisionCount→34 (+1), estCostUsd→$1.85844, estCreditsTotal→205.838
+
+**Per-Dispatch Consumption** (all tier-default except Scribe):
+- Task Researcher: 6000 input × $3.00/MTok + 3500 output × $15.00/MTok = $0.0705 USD = 7.05 credits
+- Task Planner: 5000 input × $3.00/MTok + 2500 output × $15.00/MTok = $0.0525 USD = 5.25 credits
+- Task Implementor: 7000 input × $3.00/MTok + 4000 output × $15.00/MTok = $0.081 USD = 8.1 credits
+- Scribe (fast/tier-1): 1300 input × $0.80/MTok + 600 output × $4.00/MTok = $0.00344 USD = 0.344 credits
+
+**Run Totals Updated**:
+- dispatchCount: 59 → 63 (+4)
+- decisionCount: 33 → 34 (+1)
+- Input tokens: 263,800 → 283,100 (+19,300)
+- Output tokens: 115,350 → 125,950 (+10,600)
+- estCostUsd: $1.85144 → $1.85844 (+$0.00700)
+- estCreditsTotal: 185.094 → 205.838 (+20.744)
+
+**Status**: ✓ Complete
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#phase-2-landed-offline-real-eval-producer-seam-for-qualitysafety-benchmarks--test-env-isolation-conftest-2026-07-22`
+
+---
+
+## Dispatch: Record Decision #32 + ARM Catalog Chat-Gate Implementation (2026-07-22T19:30:00Z)
+
+**Operation**: Record Decision #32 (ARM catalog chat-capability gate + merged-capabilities fix) + Task Implementor dispatch history + consumption block + state increment
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended Decision #32 entry with gate layers, merged-capabilities fix, validation evidence, and decision ref
+- `.copilot-tracking/squad/history/task-implementor.md` — Appended dispatch entry: ARM catalog gate + merged-capabilities implementation, coordinator verification (targeted + full pytest, git-stash proof, live gpt-4o run), consumption block
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→58 (+2 from 56), decisionCount→32 (+1 from 31), estCostUsd→$1.84544 (+$0.0925 from $1.75244), estCreditsTotal→184.494 (+9.25 from 175.244)
+- `.copilot-tracking/squad/consumption.md` — Rewritten per-role ledger with new dispatches:
+  - Task Implementor (ARM gate implementation): 7000 input + 4500 output tokens, $0.0885 USD, 8.85 credits
+  - Squad Scribe (Decision #32 recording): 1500 input + 700 output tokens, $0.004 USD, 0.4 credits
+  - Run totals: 260,300 input + 113,650 output tokens, $1.84544 USD, 184.494 credits
+- `/memories/repo/squad-task-implementor.md` — No new durable note this turn (ARM gate fix is tactical; no multi-phase pattern to record)
+
+**Consumption Blocks Written**:
+- `.copilot-tracking/squad/history/task-implementor.md` — Dispatch consumption block (claude-3-5-sonnet default tier, 7000 input + 4500 output, $0.0885 USD, 8.85 credits, basis: tier-default)
+- `.copilot-tracking/squad/history/scribe.md` — Decision #32 recording dispatch consumption (claude-3-haiku tier-1, 1500 input + 700 output, $0.004 USD, 0.4 credits, basis: tier-default)
+
+**Per-Dispatch Consumption**:
+- Task Implementor (default tier): 7000 × $3.00/MTok + 4500 × $15.00/MTok = (21000 + 67500) / 1e6 = $0.0885 USD → 8.85 credits
+- Scribe (tier-1): 1500 × $0.80/MTok + 700 × $4.00/MTok = (1200 + 2800) / 1e6 = $0.004 USD → 0.4 credits
+
+**Run Totals Updated**:
+- dispatchCount: 56 → 58 (+2)
+- decisionCount: 31 → 32 (+1)
+- estCostUsd: $1.75244 → $1.84544 (+$0.0925)
+- estCreditsTotal: 175.244 → 184.494 (+9.25)
+
+**Consumption Ledger Updated** (per-role aggregates):
+- Task Implementor (TG8/TG9 Final): 15,300 → 22,300 tokens, $0.1569 → $0.2454 USD
+- Squad Scribe: 27,900 → 29,400 tokens, $0.05892 → $0.06292 USD
+
+**Status**: ✓ Complete
+
+**Next Steps**: Decision #32 (ARM catalog gate) recorded and persisted. Squad ready for continuation on core pipeline live-mode testing and Phase 2 quality/safety enrichment prep. Currently: 58 total dispatches, 32 decisions, $1.84544 USD est. cost, 184.494 credits est. total.
+
+---
+
+## Dispatch: Record Decision #33 + Correction to Decision #32 Known Follow-Up (2026-07-22T20:15:00Z)
+
+**Operation**: Record Decision #33 (correction: 7 failing tests were env pollution, not regression) and scribe dispatch history + consumption block + state increment
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended Decision #33 entry: correction to Decision #32's "known follow-up" claim; root cause verified as `DEPLOYMENT_TYPE=GlobalStandard` env var pollution in PowerShell session; coordinator verification: clean-env run = 90 passed, 0 failed; deferred optional hardening suggestion
+- `.copilot-tracking/squad/history/scribe.md` — Appended this dispatch entry: Decision #33 recording + consumption block
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→59 (+1 from 58), decisionCount→33 (+1 from 32), estCostUsd→$1.85144 (+$0.006 from $1.84544), estCreditsTotal→185.094 (+0.6 from 184.494)
+- `.copilot-tracking/squad/consumption.md` — Rewritten per-role ledger with new Scribe dispatch (tier-1/fast, 2500 input + 1000 output tokens, $0.006 USD, 0.6 credits); run totals incremented: 263,800 input + 115,350 output tokens, $1.85144 USD, 185.094 credits
+- `/memories/repo/squad-deployment-type-env-pollution.md` — Created: durable lesson about DEPLOYMENT_TYPE env var leaking into pytest via config.azure.deployment_type → run_context.deployment_type, causing spurious recommender-test failures
+
+**Consumption Block Written**:
+- `.copilot-tracking/squad/history/scribe.md` — Decision #33 recording dispatch consumption block (claude-3-haiku tier-1/fast, 2500 input × $0.80/MTok + 1000 output × $4.00/MTok = ($2.00 + $4.00) / 1e6 = $0.006 USD, 0.6 credits, basis: tier-default)
+
+**Per-Dispatch Consumption**:
+- Scribe: 2500 input + 1000 output (claude-3-haiku tier-1) = $0.006 USD = 0.6 credits
+
+**Run Totals Updated**:
+- dispatchCount: 58 → 59 (+1)
+- decisionCount: 32 → 33 (+1)
+- estCostUsd: $1.84544 → $1.85144 (+$0.006)
+- estCreditsTotal: 184.494 → 185.094 (+0.6)
+
+**Repository Memory Written** (`/memories/repo/squad-deployment-type-env-pollution.md`):
+- Captured reusable lesson: Tests read DEPLOYMENT_TYPE from ambient shell via config.azure.deployment_type → run_context.deployment_type; exported DEPLOYMENT_TYPE from live runs leaks into pytest; make_supported_deployment_type filter drops all fixture candidates; clearing DEPLOYMENT_TYPE/ALLOWED_REGIONS before test run is mandatory to avoid spurious recommender-test failures
+
+**Status**: ✓ Complete
+
+**Member Name**: Scribe
+
+
+## Dispatch: Record Decision #31 + Phase 1 Implementation Dispatch (2026-07-22T18:40:00Z)
+
+**Operation**: Append Decision #31 (Phase 1 quality/safety enrichment shipped), Task Implementor Phase 1 dispatch history + consumption block, update state.json counters, update consumption.md ledger.
+
+**Artifacts Written**:
+- `.copilot-tracking/squad/decisions.md` — Appended: "Phase 1 Quality/Safety Enrichment Shipped (Cached Benchmark Source) — Decision #31" decision entry with implementation summary, files changed, and decision ref
+- `.copilot-tracking/squad/history/task-implementor.md` — Appended: Phase 1 quality/safety enrichment implementation dispatch record + consumption block (claude-3-5-sonnet default tier, 6800 input + 4200 output tokens, $0.0834 USD, 8.34 credits)
+- `.copilot-tracking/squad/state.json` — Updated: dispatchCount→56 (+2 from 54), decisionCount→31 (+1 from 30), estCostUsd→1.75244 (+0.08748 from 1.66496), estCreditsTotal→175.244 (+8.748 from 166.496)
+- `.copilot-tracking/squad/consumption.md` — Rewritten: per-role ledger updated with Task Implementor Phase 1 consumption (6800+4200 tokens) and Scribe Phase 1 recording dispatch (1600+700 tokens); run totals incremented
+- `/memories/repo/squad-task-implementor.md` — Created: durable note capturing quality/safety enrichment twin pattern + curated-seed benchmark file strategy for future phases
+
+**Consumption Blocks Written**:
+- `.copilot-tracking/squad/history/task-implementor.md` — Phase 1 implementation dispatch consumption (6800 input × $3.00/MTok + 4200 output × $15.00/MTok = $0.0834 USD, 8.34 credits, basis: estimated)
+- `.copilot-tracking/squad/history/scribe.md` — Decision #31 recording dispatch consumption (1600 input × $0.80/MTok + 700 output × $4.00/MTok = $0.00408 USD, 0.408 credits, basis: tier-default)
+
+**Per-Dispatch Consumption**:
+- Task Implementor: 6800 input + 4200 output (claude-3-5-sonnet) = $0.0834 USD
+- Scribe: 1600 input + 700 output (claude-3-haiku tier-1/fast) = $0.00408 USD
+
+**Run Totals Updated**:
+- dispatchCount: 54 → 56 (+2)
+- decisionCount: 30 → 31 (+1)
+- estCostUsd: $1.66496 → $1.75244 (+$0.08748)
+- estCreditsTotal: 166.496 → 175.244 (+8.748)
+
+**Member Name**: Scribe
+
+**Status**: ✓ Complete
+
+**Consumption Block**:
+```
+model: claude-3-haiku
+model_tier: tier-1/fast
+input_tokens: 1600
+cached_tokens: 0
+output_tokens: 700
+input_rate: 0.80
+cached_rate: 0.08
+output_rate: 4.00
+est_cost_usd: 0.00408
+est_credits: 0.408
+basis: tier-default
+```
+
+---
+
 ## Consumption Block: Decision #30 Recording Dispatch
 
 **Dispatch**: Squad Scribe — Record decision #30 + research dispatch history + consumption + state increment

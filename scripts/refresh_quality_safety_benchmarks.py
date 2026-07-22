@@ -22,8 +22,12 @@ import os
 import sys
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 # Allow standalone execution (python scripts/...) to import the src package.
@@ -40,11 +44,13 @@ from src.evaluator.quality_safety_eval_client import (  # noqa: E402
     derive_safety_score,
     has_safety_signal,
 )
-from src.shared.errors import DependencyUnavailableError  # noqa: E402
+from src.shared.errors import ContractError, DependencyUnavailableError  # noqa: E402
 
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
 _DEFAULT_OUTPUT = _REPO_ROOT / "config" / "quality_safety_benchmarks.yaml"
+# Golden probe prompts driving live quality/content-safety scoring.
+_DEFAULT_PROBE_DATASET = _REPO_ROOT / "datasets" / "general_qa.jsonl"
 # Per-run model ceiling; large enough for the full seed set but bounded.
 _DEFAULT_MAX_CANDIDATES = 16
 
@@ -150,6 +156,15 @@ def create_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Content-safety severity threshold T for --live (default: client default).",
+    )
+    parser.add_argument(
+        "--probe-dataset",
+        type=Path,
+        default=_DEFAULT_PROBE_DATASET,
+        help=(
+            "Golden probe JSONL driving live quality/content-safety scoring "
+            "(default: datasets/general_qa.jsonl)."
+        ),
     )
     return parser
 
@@ -315,6 +330,43 @@ def render_yaml(entries: list[dict[str, object]]) -> str:
     return f"{_HEADER}\n{body}"
 
 
+def _build_live_response_provider(
+    project: str, *, credential: object | None = None
+) -> "Callable[[str, str], str | None]":
+    """Build a string-in/string-out candidate response provider for ``--live``.
+
+    Returns a ``(model_id, prompt) -> str | None`` callable that issues a single
+    chat completion against the owned Foundry ``project`` endpoint. The
+    ``azure-ai-inference`` and ``azure-identity`` imports are deferred to the
+    first invocation, so merely constructing the provider never requires the
+    ``[evaluation]`` extra and never touches the network. In this code/data-only
+    pass the provider is built but never invoked (no ``--live`` executed). The
+    scored ``project`` is the same owned endpoint that
+    :meth:`FoundryQualitySafetyEvalClient.evaluate_model` validates via
+    ``assert_owned_target`` before any credential is minted, and no key or token
+    is captured here.
+    """
+
+    def _provider(model_id: str, prompt: str) -> str | None:
+        from azure.ai.inference import ChatCompletionsClient
+        from azure.ai.inference.models import UserMessage
+        from azure.identity import DefaultAzureCredential
+
+        token_credential = credential or DefaultAzureCredential()
+        client = ChatCompletionsClient(endpoint=project, credential=token_credential)
+        result = client.complete(
+            model=model_id, messages=[UserMessage(content=prompt)]
+        )
+        choices = getattr(result, "choices", None)
+        if not choices:
+            return None
+        message = getattr(choices[0], "message", None)
+        content = getattr(message, "content", None)
+        return content if isinstance(content, str) else None
+
+    return _provider
+
+
 def _select_client(
     args: argparse.Namespace,
 ) -> tuple[QualitySafetyEvalClient | None, dict[str, dict[str, object]] | None, int]:
@@ -347,11 +399,26 @@ def _select_client(
         print(f"--live requires: {', '.join(missing)}.", file=sys.stderr)
         return None, None, EXIT_FAILURE
 
+    # Load the golden probe set that drives live quality/content-safety scoring.
+    # A missing or malformed dataset is a clean refusal, not a traceback.
+    from src.evaluator.dataset_loader import load_jsonl_dataset
+
+    try:
+        dataset = load_jsonl_dataset(args.probe_dataset)
+    except ContractError:
+        print(
+            f"--live probe dataset unavailable: {args.probe_dataset}.",
+            file=sys.stderr,
+        )
+        return None, None, EXIT_FAILURE
+
     client_kwargs: dict[str, object] = {
         "azure_ai_project": project,
         "judge_model": judge,
         "num_objectives": args.num_objectives,
         "max_candidates": args.max_candidates,
+        "probe_prompts": tuple(record.prompt for record in dataset.records),
+        "response_provider": _build_live_response_provider(project),
     }
     if args.content_safety_threshold is not None:
         client_kwargs["content_safety_threshold"] = args.content_safety_threshold

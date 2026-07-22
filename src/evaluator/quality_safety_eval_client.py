@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Callable, Protocol
 from urllib.parse import urlparse
 
 from src.shared.errors import DependencyUnavailableError
@@ -187,6 +187,7 @@ class FoundryQualitySafetyEvalClient:
     content_safety_threshold: int = DEFAULT_CONTENT_SAFETY_THRESHOLD
     min_samples: int = DEFAULT_MIN_SAMPLES
     probe_prompts: tuple[str, ...] | None = None
+    response_provider: Callable[[str, str], str | None] | None = None
     credential: object | None = None
 
     def __post_init__(self) -> None:
@@ -229,7 +230,10 @@ class FoundryQualitySafetyEvalClient:
 
         try:
             from azure.ai.evaluation import (
+                CoherenceEvaluator,
+                FluencyEvaluator,
                 HateUnfairnessEvaluator,
+                RelevanceEvaluator,
                 SelfHarmEvaluator,
                 SexualEvaluator,
                 ViolenceEvaluator,
@@ -241,6 +245,10 @@ class FoundryQualitySafetyEvalClient:
                 "The 'evaluation' optional dependencies are not installed. "
                 "Install them with: pip install -e '.[evaluation]'."
             ) from error
+        # Quality judges share the injected judge/grader deployment config; the
+        # content-safety and red-team factories stay classes constructed later
+        # with the in-method credential (never here, so no token is captured).
+        judge_config = self._judge_model_config()
         return SimpleNamespace(
             content_safety_evaluators={
                 "violence": ViolenceEvaluator,
@@ -248,10 +256,29 @@ class FoundryQualitySafetyEvalClient:
                 "self_harm": SelfHarmEvaluator,
                 "hate_unfairness": HateUnfairnessEvaluator,
             },
+            quality_evaluators={
+                "coherence": CoherenceEvaluator(model_config=judge_config),
+                "relevance": RelevanceEvaluator(model_config=judge_config),
+                "fluency": FluencyEvaluator(model_config=judge_config),
+            },
             red_team=RedTeam,
             attack_strategy=AttackStrategy,
             make_credential=DefaultAzureCredential,
         )
+
+    def _judge_model_config(self) -> dict[str, str]:
+        """Build the quality-judge model config from the injected deployment.
+
+        Derives the config solely from ``self.azure_ai_project`` and
+        ``self.judge_model`` so no endpoint or deployment name is hardcoded. The
+        result is passed to the Coherence/Relevance/Fluency evaluators and never
+        carries a credential, key or token.
+        """
+
+        return {
+            "azure_endpoint": self.azure_ai_project,
+            "azure_deployment": self.judge_model,
+        }
 
     def _resolve_target_endpoint(self) -> str:
         return self.target_endpoint or self.azure_ai_project
@@ -272,31 +299,150 @@ class FoundryQualitySafetyEvalClient:
 
     def _run_quality(
         self, sdk: SimpleNamespace, credential: object, model_id: str, target: str
-    ) -> dict[str, float] | None:
+    ) -> dict[str, float | None] | None:
         """Return mean 1..5 Likert quality metrics, or ``None`` when unscored.
 
-        Quality scoring requires an operator-supplied golden probe set and a
-        reachable target response provider. Absent those, the signal is UNSCORED
-        so the refresh tool falls back to curated-seed provenance rather than
-        fabricating a score.
+        For each golden probe prompt the injected ``response_provider`` yields a
+        candidate response (string). Fluency judges the response alone, while
+        Coherence and Relevance judge it against the prompt as ``query``. There
+        is no retrieved context under the string-only probe seam, so
+        ``groundedness`` is always ``None`` and never scored. Each dimension's
+        mean is taken over only the rows whose evaluator returned a numeric 1..5
+        score; errored or out-of-range rows are skipped (never counted as zero).
+        A dimension with no scored rows is ``None``; when every dimension is
+        ``None`` (empty probe set, absent provider, or all rows errored) the
+        whole signal is UNSCORED (``None``) rather than fabricated.
         """
 
         if not self.probe_prompts:
             return None
-        return None
+        # No provider means no candidate responses to judge; treat as a scan
+        # error (UNSCORED) rather than fabricating responses (council C1).
+        if self.response_provider is None:
+            return None
+
+        evaluators = getattr(sdk, "quality_evaluators", {})
+        dimensions = ("coherence", "relevance", "fluency")
+        totals = {dimension: 0.0 for dimension in dimensions}
+        counts = {dimension: 0 for dimension in dimensions}
+
+        for prompt in self.probe_prompts:
+            try:
+                response = self.response_provider(model_id, prompt)
+            except Exception:  # noqa: BLE001 - row-level isolation (council C8).
+                response = None
+            if response is None:
+                continue
+            row_calls = {
+                "fluency": (evaluators.get("fluency"), {"response": response}),
+                "coherence": (
+                    evaluators.get("coherence"),
+                    {"query": prompt, "response": response},
+                ),
+                "relevance": (
+                    evaluators.get("relevance"),
+                    {"query": prompt, "response": response},
+                ),
+            }
+            for dimension, (evaluator, kwargs) in row_calls.items():
+                score = self._score_quality_dim(evaluator, dimension, kwargs)
+                if score is not None:
+                    totals[dimension] += score
+                    counts[dimension] += 1
+
+        scores: dict[str, float | None] = {"groundedness": None}
+        scored_any = False
+        for dimension in dimensions:
+            if counts[dimension] > 0:
+                scores[dimension] = totals[dimension] / counts[dimension]
+                scored_any = True
+            else:
+                scores[dimension] = None
+        if not scored_any:
+            return None
+        return scores
+
+    @staticmethod
+    def _score_quality_dim(
+        evaluator: object, dimension: str, kwargs: dict[str, str]
+    ) -> float | None:
+        """Invoke one quality judge for a single row, returning a 1..5 score.
+
+        Any evaluator exception, a missing evaluator, a non-numeric result or a
+        score outside the ``1..5`` Likert band degrades to ``None`` so the caller
+        skips that (row, dimension) without aborting the batch (council C8).
+        """
+
+        if evaluator is None:
+            return None
+        try:
+            result = evaluator(**kwargs)
+        except Exception:  # noqa: BLE001 - per-(row, dim) isolation (council C8).
+            return None
+        score = resolve_evaluator_score(result, dimension)
+        if score is None or not 1.0 <= score <= 5.0:
+            return None
+        return score
 
     def _run_content_safety(
         self, sdk: SimpleNamespace, credential: object, model_id: str, target: str
     ) -> tuple[int, int] | None:
         """Return ``(flagged_count, total_count)`` or ``None`` when unscored.
 
-        Requires an operator-supplied probe set and a reachable target response
-        provider; absent those the signal is UNSCORED (curated-seed fallback).
+        For each golden probe prompt the injected ``response_provider`` yields a
+        candidate response, which the four content-safety evaluators score for
+        0..7 severity. A row is scored when at least one evaluator returned a
+        numeric severity, and flagged when the worst numeric severity reaches
+        ``content_safety_threshold``. ``total`` counts scored rows and
+        ``flagged`` counts flagged scored rows; the ``min_samples`` guard is
+        applied later in :meth:`evaluate_model`, not here. Rows with no response
+        or no numeric severity are skipped, and the signal is ``None`` only when
+        zero rows scored (council C6/C8/C12).
         """
 
         if not self.probe_prompts:
             return None
-        return None
+        # Absent a provider there are no candidate responses to scan; UNSCORED.
+        if self.response_provider is None:
+            return None
+
+        factories = getattr(sdk, "content_safety_evaluators", {})
+        evaluators: dict[str, object] = {}
+        for name, factory in factories.items():
+            try:
+                evaluators[name] = factory(
+                    azure_ai_project=self.azure_ai_project, credential=credential
+                )
+            except Exception:  # noqa: BLE001 - one bad evaluator isolates itself.
+                continue
+
+        flagged = 0
+        total = 0
+        for prompt in self.probe_prompts:
+            try:
+                response = self.response_provider(model_id, prompt)
+            except Exception:  # noqa: BLE001 - row-level isolation (council C8).
+                response = None
+            if response is None:
+                continue
+            severities: list[float] = []
+            for name, evaluator in evaluators.items():
+                try:
+                    result = evaluator(query=prompt, response=response)
+                except Exception:  # noqa: BLE001 - per-(row, evaluator) isolation.
+                    continue
+                severity = resolve_evaluator_score(result, name)
+                if severity is not None:
+                    severities.append(severity)
+            if not severities:
+                continue
+            total += 1
+            if max(severities) >= self.content_safety_threshold:
+                flagged += 1
+
+        if total == 0:
+            return None
+        return (flagged, total)
 
     def _run_red_team(
         self, sdk: SimpleNamespace, credential: object, model_id: str, target: str
@@ -425,6 +571,34 @@ def clamp01(value: float) -> float:
     """Clamp ``value`` into the closed ``0.0..1.0`` interval."""
 
     return max(0.0, min(1.0, value))
+
+
+def resolve_evaluator_score(result: object, dimension: str) -> float | None:
+    """Read a numeric score for ``dimension`` from an evaluator result dict.
+
+    Azure AI Evaluation evaluators return dicts whose score key may be bare
+    (``"coherence"``, ``"violence"``) or vendor-prefixed/suffixed
+    (``"gpt_coherence"``, ``"violence_score"``). This resolver scans those
+    variants and returns the first numeric value found, coercing to ``float``.
+    Booleans, missing keys and non-numeric values (including string labels such
+    as a content-safety reason) resolve to ``None`` so the caller treats that
+    (row, dimension) as errored rather than fabricating a score.
+    """
+
+    if not isinstance(result, dict):
+        return None
+    candidates = (
+        dimension,
+        f"{dimension}_score",
+        f"gpt_{dimension}",
+    )
+    for key in candidates:
+        value = result.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            return float(value)
+    return None
 
 
 def derive_quality_score(signals: RawEvalSignals) -> float | None:

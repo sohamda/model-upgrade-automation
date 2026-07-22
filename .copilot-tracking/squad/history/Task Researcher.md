@@ -205,3 +205,52 @@ est_credits: 0.704
 basis: estimated
 ```
 
+---
+
+## Council Dispatch: WI-03 Live Quality/Safety Evaluation Harness + Golden Dataset (2026-07-22)
+
+**Council Verdict Topic**: wi-03-quality-safety-harness-dataset
+
+**Request**: 
+Evaluate implementation feasibility for WI-03 live quality/content-safety evaluation harness (response-provider seam, golden dataset, quality-evaluator surfaces) from evaluation infrastructure perspective. Assess:
+- Response-provider callback pattern (callability, error handling, None-on-missing distinction)
+- Golden dataset loading and validation (benign-only contract, CSV/JSONL format, determinism)
+- Quality-evaluator surfaces (coherence/relevance/fluency, judge model sourcing, aggregation rules)
+- Content-safety scoring logic (worst-of-4 severity, threshold application, per-row isolation)
+- Test coverage and containment (hermetic tests, scope-lock, transient response handling)
+- Phase 3 live-eval future-proofing (stub vs. live seam, --live gate, lazy import isolation)
+
+**Findings**:
+
+**Verdict**: Go-With-Conditions / Low risk (implementation-level constraints, no blockers)
+
+**Evaluation Assessment**: Response-provider callback pattern is clean and testable. Golden dataset pattern (benign-only JSONL) mirrors existing benchmark-source design. Quality surfaces (coherence/relevance/fluency aggregation) align with established eval patterns. Content-safety worst-of-4 + threshold is sound. Phase 3 (live Foundry client swap) is unblocked architecturally.
+
+**Binding Conditions**:
+1. Response-provider callable signature: `Callable[[model_id:str, prompt:str], response:str|None]`; return None on error (scan error, not fabrication)
+2. Golden dataset schema: JSONL rows with {id, prompt, expected_output?}; benign-only validation at load time (assert no PII/sensitive patterns)
+3. Quality aggregators: Coherence/Relevance use query+response; Fluency response-only; all normalize to 0..1 and aggregate via mean (skip errored rows)
+4. Content-safety worst-of-4: max severity across 4 sub-checks (violence, sexual, hate, self-harm); if severity >= threshold → flagged
+5. Per-row error isolation: one row error does NOT block other rows; erred row returns None for that eval dimension; aggregation skips None values
+6. Hermetic test coverage: directly on _run_quality/_run_content_safety bodies (not only via evaluate_model), covering success/error/timeout/empty paths
+7. Phase 3 future-proofing: FoundryQualitySafetyEvalClient body deferred (stub only in WI-03); real client swap happens in WI-04 behind --live gate with import guards
+
+**Residual Risk**: Low. Implementation details (aggregation rounding, error message hygiene, timeout constants) are settable post-MVP. No evaluation-infrastructure blockers.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#council-verdict-2026-07-22-wi-03-quality-safety-harness-dataset`
+
+---
+
+**Consumption** (this dispatch):
+- model: claude-3-haiku
+- model_tier: fast
+- input_tokens: 4000
+- cached_tokens: 0
+- output_tokens: 2000
+- input_rate: 0.80
+- cached_rate: 0.08
+- output_rate: 4.00
+- est_cost_usd: 0.0112
+- est_credits: 1.12
+- basis: tier-default
+

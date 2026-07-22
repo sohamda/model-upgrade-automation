@@ -3,6 +3,7 @@ apm_modules/
 
 # Python
 .venv/
+.venv-live/
 venv/
 __pycache__/
 *.py[cod]

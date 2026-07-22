@@ -17,6 +17,7 @@ test = [
 ]
 evaluation = [
     "azure-ai-evaluation[redteam]>=1.18.1",
+    "azure-ai-inference>=1.0.0b7",
     "azure-identity>=1.17",
 ]
 

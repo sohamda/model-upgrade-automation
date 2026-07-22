@@ -23,6 +23,7 @@ from src.evaluator.quality_safety_eval_client import (
     derive_quality_score,
     derive_safety_score,
     has_safety_signal,
+    resolve_evaluator_score,
 )
 from src.shared.errors import DependencyUnavailableError
 
@@ -334,6 +335,274 @@ class FoundryEvaluateModelTests(unittest.TestCase):
         ):
             with self.assertRaises(RuntimeError):
                 client.evaluate_model("gpt-4.1")
+
+
+class _ScriptedEvaluator:
+    """Callable evaluator returning per-row scores under one score key."""
+
+    def __init__(
+        self, key: str, scores: list[float | None], *, raise_always: bool = False
+    ) -> None:
+        self._key = key
+        self._scores = list(scores)
+        self._index = 0
+        self._raise_always = raise_always
+
+    def __call__(self, **kwargs: object) -> dict[str, float]:
+        if self._raise_always:
+            raise RuntimeError("evaluator error")
+        score = self._scores[self._index]
+        self._index += 1
+        if score is None:
+            raise RuntimeError("row error")
+        return {self._key: score}
+
+
+class _StatelessEvaluator:
+    """Callable evaluator returning a fixed score irrespective of row."""
+
+    def __init__(self, key: str, score: float) -> None:
+        self._key = key
+        self._score = score
+
+    def __call__(self, **kwargs: object) -> dict[str, float]:
+        return {self._key: self._score}
+
+
+def _factory(evaluator: object) -> object:
+    """Wrap an evaluator instance in a content-safety factory closure."""
+
+    def _make(**kwargs: object) -> object:
+        return evaluator
+
+    return _make
+
+
+def _foundry(
+    probe_prompts: tuple[str, ...] | None,
+    response_provider: object,
+    *,
+    content_safety_threshold: int = DEFAULT_CONTENT_SAFETY_THRESHOLD,
+) -> FoundryQualitySafetyEvalClient:
+    """Construct a live client with an injected probe seam, no extra required."""
+
+    with _allow_azure_import():
+        return FoundryQualitySafetyEvalClient(
+            azure_ai_project="https://owned.example/api/projects/p",
+            judge_model="judge-1",
+            probe_prompts=probe_prompts,
+            response_provider=response_provider,  # type: ignore[arg-type]
+            content_safety_threshold=content_safety_threshold,
+            credential=object(),
+        )
+
+
+class RunQualityTests(unittest.TestCase):
+    def test_given_scored_rows_when_running_then_per_dim_means_and_groundedness_none(
+        self,
+    ) -> None:
+        client = _foundry(("p1", "p2", "p3"), lambda model_id, prompt: f"resp-{prompt}")
+        sdk = SimpleNamespace(
+            quality_evaluators={
+                "fluency": _ScriptedEvaluator("fluency", [3.0, 4.0, 5.0]),
+                "coherence": _ScriptedEvaluator("coherence", [2.0, 3.0, 4.0]),
+                "relevance": _ScriptedEvaluator("relevance", [5.0, 5.0, 5.0]),
+            }
+        )
+
+        scores = client._run_quality(sdk, object(), "m1", "target")
+
+        assert scores is not None
+        self.assertIsNone(scores["groundedness"])
+        self.assertAlmostEqual(scores["fluency"], 4.0, places=6)
+        self.assertAlmostEqual(scores["coherence"], 3.0, places=6)
+        self.assertAlmostEqual(scores["relevance"], 5.0, places=6)
+
+    def test_given_one_dimension_errors_when_running_then_that_dim_none(self) -> None:
+        client = _foundry(("p1", "p2", "p3"), lambda model_id, prompt: "resp")
+        sdk = SimpleNamespace(
+            quality_evaluators={
+                "fluency": _ScriptedEvaluator("fluency", [4.0, 4.0, 4.0]),
+                "coherence": _ScriptedEvaluator("coherence", [], raise_always=True),
+                "relevance": _ScriptedEvaluator("relevance", [4.0, 4.0, 4.0]),
+            }
+        )
+
+        scores = client._run_quality(sdk, object(), "m1", "target")
+
+        assert scores is not None
+        self.assertIsNone(scores["coherence"])
+        self.assertAlmostEqual(scores["fluency"], 4.0, places=6)
+        self.assertAlmostEqual(scores["relevance"], 4.0, places=6)
+
+    def test_given_empty_probe_prompts_when_running_then_none(self) -> None:
+        client = _foundry((), lambda model_id, prompt: "resp")
+        sdk = SimpleNamespace(quality_evaluators={})
+
+        self.assertIsNone(client._run_quality(sdk, object(), "m1", "target"))
+
+    def test_given_absent_provider_when_running_then_none(self) -> None:
+        client = _foundry(("p1",), None)
+        sdk = SimpleNamespace(
+            quality_evaluators={"fluency": _StatelessEvaluator("fluency", 4.0)}
+        )
+
+        self.assertIsNone(client._run_quality(sdk, object(), "m1", "target"))
+
+    def test_given_all_rows_error_when_running_then_none(self) -> None:
+        client = _foundry(("p1", "p2"), lambda model_id, prompt: "resp")
+        sdk = SimpleNamespace(
+            quality_evaluators={
+                "fluency": _ScriptedEvaluator("fluency", [], raise_always=True),
+                "coherence": _ScriptedEvaluator("coherence", [], raise_always=True),
+                "relevance": _ScriptedEvaluator("relevance", [], raise_always=True),
+            }
+        )
+
+        self.assertIsNone(client._run_quality(sdk, object(), "m1", "target"))
+
+
+class RunContentSafetyTests(unittest.TestCase):
+    def test_given_crafted_severities_when_running_then_exact_flag_and_total(
+        self,
+    ) -> None:
+        client = _foundry(
+            ("p1", "p2", "p3", "p4", "p5"), lambda model_id, prompt: "resp"
+        )
+        sdk = SimpleNamespace(
+            content_safety_evaluators={
+                "violence": _factory(
+                    _ScriptedEvaluator("violence", [4.0, 1.0, 0.0, 2.0, 1.0])
+                ),
+                "sexual": _factory(
+                    _ScriptedEvaluator("sexual", [0.0, 0.0, 0.0, 0.0, 0.0])
+                ),
+                "self_harm": _factory(
+                    _ScriptedEvaluator("self_harm", [0.0, 0.0, 0.0, 0.0, 0.0])
+                ),
+                "hate_unfairness": _factory(
+                    _ScriptedEvaluator("hate_unfairness", [0.0, 0.0, 5.0, 0.0, 0.0])
+                ),
+            }
+        )
+
+        result = client._run_content_safety(sdk, object(), "m1", "target")
+
+        self.assertEqual(result, (2, 5))
+
+    def test_given_empty_probe_prompts_when_running_then_none(self) -> None:
+        client = _foundry((), lambda model_id, prompt: "resp")
+        sdk = SimpleNamespace(content_safety_evaluators={})
+
+        self.assertIsNone(client._run_content_safety(sdk, object(), "m1", "target"))
+
+    def test_given_all_evaluators_error_when_running_then_none(self) -> None:
+        client = _foundry(("p1", "p2"), lambda model_id, prompt: "resp")
+        sdk = SimpleNamespace(
+            content_safety_evaluators={
+                "violence": _factory(
+                    _ScriptedEvaluator("violence", [], raise_always=True)
+                )
+            }
+        )
+
+        self.assertIsNone(client._run_content_safety(sdk, object(), "m1", "target"))
+
+    def test_given_unresponsive_row_when_running_then_excluded_from_total(self) -> None:
+        def _provider(model_id: str, prompt: str) -> str | None:
+            return None if prompt == "p2" else "resp"
+
+        client = _foundry(("p1", "p2", "p3"), _provider)
+        sdk = SimpleNamespace(
+            content_safety_evaluators={
+                "violence": _factory(_ScriptedEvaluator("violence", [4.0, 0.0]))
+            }
+        )
+
+        result = client._run_content_safety(sdk, object(), "m1", "target")
+
+        self.assertEqual(result, (1, 2))
+
+    def test_given_reused_client_when_running_two_models_then_provider_sees_both(
+        self,
+    ) -> None:
+        seen: list[str] = []
+
+        def _provider(model_id: str, prompt: str) -> str:
+            seen.append(model_id)
+            return "resp"
+
+        client = _foundry(("p1", "p2"), _provider)
+        sdk = SimpleNamespace(
+            content_safety_evaluators={
+                "violence": _factory(_StatelessEvaluator("violence", 1.0))
+            }
+        )
+
+        client._run_content_safety(sdk, object(), "m1", "target")
+        client._run_content_safety(sdk, object(), "m2", "target")
+
+        self.assertIn("m1", seen)
+        self.assertIn("m2", seen)
+
+
+class EvaluateModelUnderSampleTests(unittest.TestCase):
+    def test_given_content_safety_below_min_samples_when_evaluating_then_rate_none(
+        self,
+    ) -> None:
+        with _allow_azure_import():
+            client = FoundryQualitySafetyEvalClient(
+                azure_ai_project="https://owned.example/api/projects/p",
+                judge_model="judge-1",
+                min_samples=5,
+                credential=object(),
+            )
+        sdk = SimpleNamespace(
+            content_safety_evaluators={
+                "violence": object,
+                "sexual": object,
+                "self_harm": object,
+                "hate_unfairness": object,
+            }
+        )
+        target = FoundryQualitySafetyEvalClient
+        with mock.patch.object(
+            target, "_load_sdk", return_value=sdk
+        ), mock.patch.object(
+            target, "_sdk_version", return_value="1.18.1"
+        ), mock.patch.object(
+            target, "_run_quality", return_value=None
+        ), mock.patch.object(
+            target, "_run_content_safety", return_value=(1, 3)
+        ), mock.patch.object(
+            target, "_run_red_team", return_value=None
+        ):
+            signals = client.evaluate_model("gpt-4.1")
+
+        self.assertIsNone(signals.content_safety_defect_rate)
+        self.assertEqual(signals.content_safety_sample_size, 3)
+
+
+class ResolveEvaluatorScoreTests(unittest.TestCase):
+    def test_given_bare_key_when_resolving_then_numeric(self) -> None:
+        self.assertEqual(resolve_evaluator_score({"coherence": 4.0}, "coherence"), 4.0)
+
+    def test_given_vendor_prefixed_key_when_resolving_then_numeric(self) -> None:
+        self.assertEqual(
+            resolve_evaluator_score({"gpt_coherence": 3.5}, "coherence"), 3.5
+        )
+
+    def test_given_suffixed_key_when_resolving_then_numeric(self) -> None:
+        self.assertEqual(resolve_evaluator_score({"violence_score": 2}, "violence"), 2.0)
+
+    def test_given_non_numeric_value_when_resolving_then_none(self) -> None:
+        self.assertIsNone(resolve_evaluator_score({"coherence": "high"}, "coherence"))
+
+    def test_given_bool_value_when_resolving_then_none(self) -> None:
+        self.assertIsNone(resolve_evaluator_score({"coherence": True}, "coherence"))
+
+    def test_given_non_dict_when_resolving_then_none(self) -> None:
+        self.assertIsNone(resolve_evaluator_score(4.0, "coherence"))
 
 
 if __name__ == "__main__":

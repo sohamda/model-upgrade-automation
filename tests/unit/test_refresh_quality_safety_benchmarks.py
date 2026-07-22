@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
 from scripts.refresh_quality_safety_benchmarks import (
+    EXIT_FAILURE,
+    EXIT_SUCCESS,
     build_entries,
     create_parser,
     main,
+    _build_live_response_provider,
     _select_client,
 )
 from src.evaluator.quality_safety_eval_client import (
@@ -201,6 +206,88 @@ class RefreshLiveBuildTests(unittest.TestCase):
             live=True,
         )
         self.assertEqual(entries, [seed])
+
+
+class RefreshLiveProbeDatasetTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _write_dataset(self, prompts: list[str]) -> Path:
+        path = self.tmp_path / "probes.jsonl"
+        lines = [
+            json.dumps({"id": f"p-{index:03d}", "prompt": prompt})
+            for index, prompt in enumerate(prompts, start=1)
+        ]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return path
+
+    def test_given_live_dataset_when_selecting_then_prompts_and_provider_threaded(
+        self,
+    ) -> None:
+        dataset_path = self._write_dataset(["prompt one", "prompt two"])
+        output = self.tmp_path / "absent.yaml"
+        args = create_parser().parse_args(
+            [
+                "--live",
+                "--foundry-project",
+                "https://owned.example/api/projects/p",
+                "--judge-model",
+                "judge",
+                "--probe-dataset",
+                str(dataset_path),
+                "--output",
+                str(output),
+            ]
+        )
+        sentinel = object()
+        captured: dict[str, object] = {}
+
+        class _Capturing:
+            def __init__(self, **kwargs: object) -> None:
+                captured.update(kwargs)
+
+        with mock.patch(
+            "scripts.refresh_quality_safety_benchmarks.FoundryQualitySafetyEvalClient",
+            _Capturing,
+        ), mock.patch(
+            "scripts.refresh_quality_safety_benchmarks._build_live_response_provider",
+            return_value=sentinel,
+        ):
+            client, seeds, exit_code = _select_client(args)
+
+        self.assertEqual(exit_code, EXIT_SUCCESS)
+        self.assertIsInstance(client, _Capturing)
+        self.assertEqual(captured["probe_prompts"], ("prompt one", "prompt two"))
+        self.assertIs(captured["response_provider"], sentinel)
+        self.assertEqual(seeds, {})
+
+    def test_given_missing_probe_dataset_when_selecting_then_refuses(self) -> None:
+        missing = self.tmp_path / "does-not-exist.jsonl"
+        args = create_parser().parse_args(
+            [
+                "--live",
+                "--foundry-project",
+                "https://owned.example/api/projects/p",
+                "--judge-model",
+                "judge",
+                "--probe-dataset",
+                str(missing),
+            ]
+        )
+
+        with redirect_stdout(io.StringIO()):
+            client, seeds, exit_code = _select_client(args)
+
+        self.assertEqual(exit_code, EXIT_FAILURE)
+        self.assertIsNone(client)
+
+    def test_given_project_when_building_provider_then_callable_without_network(
+        self,
+    ) -> None:
+        provider = _build_live_response_provider("https://owned.example/api/projects/p")
+        self.assertTrue(callable(provider))
 
 
 if __name__ == "__main__":
