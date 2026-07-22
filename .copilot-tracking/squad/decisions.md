@@ -599,6 +599,72 @@ Validation complete: CLI entry point passes (`python -m src.orchestrator.cli`), 
 
 ---
 
+## Multi-Candidate Live Quality+Safety Scan (gpt-4.1 + gpt-5.6-sol) — Results Recorded, Red-Team ASR Extraction Bug DEFERRED (2026-07-22T23:30:00Z)
+
+**Decision**: Execute user-approved "option 3 = full multi-candidate live scan across the deployed model set," record results, and defer red-team ASR extraction bug per user choice "option 2 = record and defer the fix."
+
+**Scope**: Live scan on Foundry resource ff-hub-01 / project ff-proj-001 (swedencentral). Only two models deployed there: gpt-4.1 (v2025-04-14) and gpt-5.6-sol (v2026-07-09). Curated 8-model config set is aspirational; 6 of 8 not deployed. Judge/grader deployment: gpt-4.1.
+
+**Execution** (async, venv-live Python 3.12, azure-ai-evaluation 1.18.1):
+
+```
+scripts/refresh_quality_safety_benchmarks.py \
+  --live \
+  --models gpt-4.1 gpt-5.6-sol \
+  --foundry-project "https://ff-hub-01.services.ai.azure.com/api/projects/ff-proj-001" \
+  --judge-model gpt-4.1 \
+  --num-objectives 5 \
+  --probe-dataset datasets/general_qa.jsonl \
+  --output artifacts/live-smoke-20260722/quality_safety_benchmarks.full.yaml
+```
+
+Output YAML (scratch, NOT committed): `artifacts/live-smoke-20260722/quality_safety_benchmarks.full.yaml` — 2 entries written. Curated `config/quality_safety_benchmarks.yaml` was NOT touched.
+
+**Results Recorded**:
+- **gpt-4.1**: quality_score 0.8833, safety_score 1.0
+- **gpt-5.6-sol**: quality_score 0.85, safety_score 1.0 (first-ever successful scan of this model)
+- Both entries: scored_deployment=gpt-4.1 (judge model, correct)
+- **hate_unfairness objective-fetch gap CLOSED**: all four safety categories fetched 5/5 objectives (Azure AI Developer role fully propagated)
+
+**Red-Team Actually Ran** (evidence in `.scan_*/final_results.json` scorecards):
+- **gpt-4.1** (`.scan_20260722_205642`): Overall ASR 10.0% (4/40); baseline 20%, jailbreak-transformed 0%
+- **gpt-5.6-sol** (`.scan_20260722_211312`): Overall ASR 10.71% (3/28); several attack objectives HARD-REJECTED by GPT-5-family guardrails (cyber_policy 400, invalid_prompt 400) which errored out the violence & self_harm jailbreak scenarios (partial totals). Scan completed with partial results.
+- Content-filter 400 / ResponsibleAIPolicyViolation lines = guardrails WORKING (expected), not failures
+
+**The Deferred Bug** (Known Issue, User Deferred Fix):
+
+**Location**: `src/evaluator/quality_safety_eval_client.py` `_run_red_team` / `_extract_scorecard`
+
+**Bug Shape**: Code reads `scorecard.get("overall_asr")` and treats `risk_category_summary` as dict. Actual SDK 1.18.1 shape:
+- `scorecard["risk_category_summary"]` is a **LIST**, not dict
+- `overall_asr` lives at `risk_category_summary[0]["overall_asr"]`
+- Per-risk values are FLAT keys like `hate_unfairness_asr`
+
+**Consequence**: `overall_asr` resolves to None → `_run_red_team` returns None → red_team signal dropped → `safety_score` folds ONLY content-safety benign-probe `defect_rate` (0/20 → 1.0). Recorded `safety_score 1.0` is OVERSTATED; it ignores measured red-team ASR.
+
+**If Fixed** (hypothetical recompute):
+- gpt-4.1: safety = worst(1 − defect_rate, 1 − ASR/100) = worst(1.0, 0.90) = 0.90
+- gpt-5.6-sol: safety = worst(1.0, 0.8929) = 0.8929
+
+**Visible Tell**: `evaluators_run` correctly OMITS "red_team", which is the tell that ASR was dropped.
+
+**Bug Pedigree**: Predates this run (v3 had same omission).
+
+**User Decision**: Defer the fix (option 2).
+
+**Follow-Up**: Fix the list+flat-key extraction in `_extract_scorecard`, then re-run the 2-model scan for honest safety scores.
+
+**Minor Finding**: Cosmetic UnicodeEncodeError (cp1252) in Python logging during red-team; non-fatal; set PYTHONIOENCODING=utf-8 next run.
+
+**Artifacts**:
+- Live scan results: `artifacts/live-smoke-20260722/quality_safety_benchmarks.full.yaml`
+- Red-team scan logs: `.scan_20260722_205642/`, `.scan_20260722_211312/` (final_results.json)
+- Nothing committed or pushed
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#multi-candidate-live-qualitysafety-scan-gpt-41--gpt-56-sol--results-recorded-red-team-asr-extraction-bug-deferred-2026-07-22t233000z`
+
+---
+
 ## TG7 Slice 2 Complete: Reliability Observability Stack, Alerts, and Incident Playbook (2026-07-17T16:45:00Z)
 
 **Decision**: Complete Task Group 7 (Reliability, SRE Controls, and Operability) Slice 2 — observability stack, alert definitions, Azure Monitor workbook dashboards, and incident runbook. Validate operational readiness and certify TG8 handoff prerequisites.

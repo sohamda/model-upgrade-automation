@@ -48,6 +48,69 @@ Evaluation + Quality Engineer (Developer / WI-Specific)
 
 ---
 
+## Dispatch 2: Multi-Candidate Live Quality+Safety Scan (gpt-4.1 + gpt-5.6-sol) — Results Recorded, ASR Bug Deferred (2026-07-22T23:30:00Z)
+
+**Member**: Wendy (Evaluation + Quality Engineer)
+
+**Dispatch Type**: Full multi-candidate live evaluation scan + bug triage + user choice recording
+
+**Request**: Execute user-approved "option 3 = full multi-candidate live scan" on Foundry ff-hub-01 (2 deployed models: gpt-4.1 v2025-04-14, gpt-5.6-sol v2026-07-09). Judge/scorer: gpt-4.1. Record results. Identify and triage blockers or known issues. User decision: defer bug fix (option 2).
+
+**Summary**:
+- **Command** (async, venv-live Python 3.12, azure-ai-evaluation 1.18.1):
+  ```
+  scripts/refresh_quality_safety_benchmarks.py --live --models gpt-4.1 gpt-5.6-sol \
+    --foundry-project "https://ff-hub-01.services.ai.azure.com/api/projects/ff-proj-001" \
+    --judge-model gpt-4.1 --num-objectives 5 \
+    --probe-dataset datasets/general_qa.jsonl \
+    --output artifacts/live-smoke-20260722/quality_safety_benchmarks.full.yaml
+  ```
+
+- **Results as written** (not committed):
+  - gpt-4.1: quality 0.8833, safety 1.0
+  - gpt-5.6-sol: quality 0.85, safety 1.0 (first successful scan)
+  - Both: scored_deployment=gpt-4.1, 5/5 objectives fetched across all safety categories (hate_unfairness, self_harm, sexual, violence; Azure AI Developer role propagated)
+
+- **Red-Team Evidence** (from .scan_*/final_results.json):
+  - gpt-4.1 (.scan_20260722_205642): ASR 10.0% (4/40 successful attacks)
+  - gpt-5.6-sol (.scan_20260722_211312): ASR 10.71% (3/28); GPT-5-family guardrails hard-rejected violence/self_harm jailbreak scenarios (expected behavior)
+
+- **Known Bug Identified** (NOT fixed per user decision):
+  - Location: `src/evaluator/quality_safety_eval_client.py` `_run_red_team()` / `_extract_scorecard()`
+  - Shape: Code expects `risk_category_summary` dict; actual SDK 1.18.1 is LIST with flat-key per-risk values
+  - Consequence: `overall_asr` resolves to None → red_team signal dropped → safety_score overstated (ignores measured ASR)
+  - **Honest safety scores** (if bug fixed): gpt-4.1 → 0.90, gpt-5.6-sol → 0.89
+  - Visible tell: `evaluators_run` correctly omits "red_team"
+  - Bug pedigree: Existed in v3 (not new to this run)
+  - User choice: Defer fix (option 2); record results with known caveat; follow-up task: fix extraction, then re-run 2-model scan
+
+- **Minor**: Cosmetic UnicodeEncodeError (cp1252) in Python logging during red-team; set PYTHONIOENCODING=utf-8 next run
+
+- **Nothing committed, pushed, or written to curated config/quality_safety_benchmarks.yaml**. Scratch output under artifacts/live-smoke-20260722/. Awaiting separate approvals for commit / curated write / CI live smoke.
+
+**Artifacts**:
+- Live scan output: `artifacts/live-smoke-20260722/quality_safety_benchmarks.full.yaml` (2 entries, not committed)
+- Red-team scan logs: `.scan_20260722_205642/`, `.scan_20260722_211312/` (final_results.json with scorecard details)
+- Bug triage recorded in Decision #41 and repo memory
+
+**Consumption Block** (attached):
+
+| Field | Value |
+|-------|-------|
+| model | claude-3-5-sonnet |
+| model_tier | default |
+| input_tokens | 6,500 |
+| cached_tokens | 0 |
+| output_tokens | 3,200 |
+| input_rate | $3.00 |
+| cached_rate | $0.30 |
+| output_rate | $15.00 |
+| est_cost_usd | 0.0195 |
+| est_credits | 1.95 |
+| basis | tier-default |
+
+---
+
 ## Dispatch 2: AOAI-Route Fix v3 Live Re-Validation — Red-Team Gap Closed (2026-07-22T23:30:00Z)
 
 **Member**: Wendy (Evaluation + Quality Engineer)
