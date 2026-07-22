@@ -1,0 +1,57 @@
+# Quality & safety benchmark seed for recommender enrichment.
+#
+# These are an explicitly-provenanced CURATED SEED, NOT authoritative vendor
+# benchmarks. Values are coarse (2 decimals), internally consistent, and derived
+# from the design mapping in
+# .copilot-tracking/research/20260720-quality-safety-eval-source.md (§2):
+#   quality_score = (mean_likert - 1) / 4   (1..5 Likert -> 0..1, higher=better)
+#   safety_score  = 1 - defect_rate         (0..1, higher=better)
+# Newer/larger models are given modestly higher quality; smaller models slightly
+# lower. Safety sits in a tight high band (0.90-0.98).
+#
+# This file is intended to be refreshed OUT-OF-BAND by a future optional
+# [evaluation] tool (Phase 2) that runs real content-safety / red-team
+# evaluations against a reference deployment. Until then every entry MUST carry
+# a provenance string and as_of_date declaring its curated-seed status.
+
+benchmarks:
+  - model_id: gpt-4o
+    quality_score: 0.84
+    safety_score: 0.95
+    provenance: "curated-seed: quality=(mean likert-1)/4; safety=1-defect_rate; not authoritative"
+    as_of_date: "2026-07-22"
+  - model_id: gpt-4o-mini
+    quality_score: 0.78
+    safety_score: 0.94
+    provenance: "curated-seed: quality=(mean likert-1)/4; safety=1-defect_rate; not authoritative"
+    as_of_date: "2026-07-22"
+  - model_id: gpt-4.1
+    quality_score: 0.86
+    safety_score: 0.96
+    provenance: "curated-seed: quality=(mean likert-1)/4; safety=1-defect_rate; not authoritative"
+    as_of_date: "2026-07-22"
+  - model_id: gpt-4.1-mini
+    quality_score: 0.80
+    safety_score: 0.95
+    provenance: "curated-seed: quality=(mean likert-1)/4; safety=1-defect_rate; not authoritative"
+    as_of_date: "2026-07-22"
+  - model_id: gpt-4.1-nano
+    quality_score: 0.74
+    safety_score: 0.93
+    provenance: "curated-seed: quality=(mean likert-1)/4; safety=1-defect_rate; not authoritative"
+    as_of_date: "2026-07-22"
+  - model_id: gpt-5.1
+    quality_score: 0.90
+    safety_score: 0.97
+    provenance: "curated-seed: quality=(mean likert-1)/4; safety=1-defect_rate; not authoritative"
+    as_of_date: "2026-07-22"
+  - model_id: o3
+    quality_score: 0.88
+    safety_score: 0.96
+    provenance: "curated-seed: quality=(mean likert-1)/4; safety=1-defect_rate; not authoritative"
+    as_of_date: "2026-07-22"
+  - model_id: o4-mini
+    quality_score: 0.82
+    safety_score: 0.95
+    provenance: "curated-seed: quality=(mean likert-1)/4; safety=1-defect_rate; not authoritative"
+    as_of_date: "2026-07-22"

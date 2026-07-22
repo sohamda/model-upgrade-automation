@@ -22,6 +22,7 @@ from src.recommender.arm_catalog_source import ArmModelsCatalogSource
 from src.recommender.catalog import CandidateCatalog, FixtureCandidateCatalog, build_default_catalog
 from src.recommender.foundry_catalog_source import LearnFoundryCatalogSource
 from src.recommender.pricing_source import RetailPricesClient
+from src.recommender.quality_safety_source import QualitySafetyBenchmarkSource
 from src.recommender.service import recommend_candidates
 from src.shared.azure_auth import create_credential_descriptor
 from src.shared.config import AppConfig, RuntimeOptions, load_app_config
@@ -271,9 +272,16 @@ def execute_dry_run(
         if _should_use_official_sources(config, runtime_options)
         else None
     )
+    # Curated quality/safety benchmarks share the same official-sources gate:
+    # hermetic and fixture runs keep static catalog placeholder scores.
+    qs_client = (
+        QualitySafetyBenchmarkSource(repo_root / "config" / "quality_safety_benchmarks.yaml")
+        if _should_use_official_sources(config, runtime_options)
+        else None
+    )
     for target in detector_result.retiring_targets:
         recommended = recommend_candidates(
-            config, run_context, target, catalog, price_client=price_client
+            config, run_context, target, catalog, price_client=price_client, qs_client=qs_client
         )
         top_candidates = recommended.ranked_candidates[: runtime_options.top_k]
         provision_plan = plan_provisioning(config, run_context, target, top_candidates)

@@ -1,0 +1,162 @@
+name: Refresh Quality/Safety Benchmarks
+
+# Refreshes config/quality_safety_benchmarks.yaml. Scheduled runs default to the
+# dependency-free stub (dry-run) and only execute when the opt-in repository
+# variable ENABLE_SCHEDULED_QS_REFRESH is 'true'. Live Foundry evaluation runs
+# ONLY on an explicit workflow_dispatch with live=true.
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Run the real Foundry evaluator (--live). Requires Foundry project + judge vars.'
+        required: false
+        default: false
+        type: boolean
+      open_pr:
+        description: 'Open an auto-PR committing only the refreshed benchmark YAML.'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: refresh-quality-safety-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BENCHMARK_PATH: config/quality_safety_benchmarks.yaml
+  ENABLE_SCHEDULED_QS_REFRESH: ${{ vars.ENABLE_SCHEDULED_QS_REFRESH || 'false' }}
+
+jobs:
+  refresh:
+    name: Refresh Benchmarks
+    # Scheduled runs are gated behind the opt-in repo var; manual runs always allowed.
+    if: github.event_name != 'schedule' || vars.ENABLE_SCHEDULED_QS_REFRESH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      changed: ${{ steps.refresh.outputs.changed }}
+    env:
+      # Live only when explicitly dispatched with live=true; every other trigger
+      # (schedule, manual live=false) stays stub/dry-run and Azure-free.
+      LIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.live == true }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FOUNDRY_PROJECT_ENDPOINT }}
+      JUDGE_MODEL: ${{ vars.JUDGE_MODEL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+
+      - name: Install package
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check -e .
+          if [ "${LIVE}" = "true" ]; then
+            python -m pip install --disable-pip-version-check -e '.[evaluation]'
+          fi
+
+      - name: Azure login with OIDC
+        if: env.LIVE == 'true'
+        uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Refresh benchmark YAML
+        id: refresh
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          before="$(sha256sum "${BENCHMARK_PATH}" | awk '{print $1}')"
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
+            # Scheduled: never touch Azure, never mutate the file.
+            python scripts/refresh_quality_safety_benchmarks.py --dry-run
+          elif [ "${LIVE}" = "true" ]; then
+            python scripts/refresh_quality_safety_benchmarks.py --live \
+              --foundry-project "${FOUNDRY_PROJECT_ENDPOINT}" \
+              --judge-model "${JUDGE_MODEL}"
+          else
+            # Manual live=false: stub write (Azure-free).
+            python scripts/refresh_quality_safety_benchmarks.py
+          fi
+          after="$(sha256sum "${BENCHMARK_PATH}" | awk '{print $1}')"
+          if [ "${before}" != "${after}" ]; then
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Upload refreshed benchmark
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: quality-safety-benchmarks
+          path: ${{ env.BENCHMARK_PATH }}
+          if-no-files-found: warn
+
+  open-pr:
+    name: Open Benchmark PR
+    needs: refresh
+    # Auto-PR is opt-in and only when the refresh actually changed the file.
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.open_pr == true
+      && needs.refresh.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: true
+
+      - name: Download refreshed benchmark
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # First-party gh CLI download avoids adding an unverified action pin.
+          gh run download "${GITHUB_RUN_ID}" --name quality-safety-benchmarks --dir config
+
+      - name: Open pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branch="chore/refresh-quality-safety-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          # Stage ONLY the benchmark YAML; nothing else may enter the PR.
+          git add "${BENCHMARK_PATH}"
+          if git diff --cached --quiet; then
+            echo "No benchmark changes to commit."
+            exit 0
+          fi
+          git commit -m "chore: refresh quality/safety benchmarks"
+          git push --set-upstream origin "${branch}"
+          gh pr create \
+            --title "chore: refresh quality/safety benchmarks" \
+            --body "Automated refresh of \`${BENCHMARK_PATH}\`. Review provenance before merging." \
+            --base "${GITHUB_REF_NAME}" \
+            --head "${branch}"

@@ -7,9 +7,11 @@ import unittest
 
 from src.recommender.catalog import FixtureCandidateCatalog
 from src.recommender.pricing_source import RetailPricesClient
+from src.recommender.quality_safety_source import QualitySafetyRecord
 from src.recommender.service import recommend_candidates
 from src.shared.config import load_app_config
 from src.shared.contracts import RetiringTarget
+from src.shared.errors import DependencyUnavailableError
 from src.shared.run_context import build_run_context
 
 
@@ -127,6 +129,106 @@ class RecommenderServicePricingTests(unittest.TestCase):
         )
 
     def test_given_no_price_client_when_recommending_then_no_pricing_warnings(self) -> None:
+        # Arrange
+        config = load_app_config(HERMETIC_REPO)
+        run_context = build_run_context(config, run_id="test-run")
+        target = RetiringTarget(
+            model_id="gpt-4.1-mini",
+            current_version="2025-04-14",
+            region="swedencentral",
+            workload="general_qa",
+            retirement_date="2026-08-15",
+            days_until_retirement=31,
+            source="fixture",
+            replacement_family="gpt-4.1",
+        )
+        catalog = FixtureCandidateCatalog(
+            REPO_ROOT / "tests" / "fixtures" / "candidate_catalog.yaml"
+        )
+
+        # Act
+        result = recommend_candidates(config, run_context, target, catalog)
+
+        # Assert
+        self.assertEqual(len(result.ranked_candidates), 2)
+        self.assertEqual(result.parse_warnings, [])
+
+
+class _StubQualitySafetyClient:
+    """Structural stub returning benchmark records for a subset of models."""
+
+    def __init__(self, records: dict[str, QualitySafetyRecord]) -> None:
+        self._records = records
+
+    def fetch_record(self, model_id: str, region: str) -> QualitySafetyRecord:
+        record = self._records.get(model_id)
+        if record is None:
+            raise DependencyUnavailableError(f"no entry for {model_id}")
+        return record
+
+
+class RecommenderServiceQualitySafetyTests(unittest.TestCase):
+    def test_given_qs_client_when_recommending_then_scores_reflected_and_warnings_surface(self) -> None:
+        # Arrange: benchmark gpt-4.1 only; gpt-4.1-nano is unlisted and warns.
+        config = load_app_config(HERMETIC_REPO)
+        run_context = build_run_context(config, run_id="test-run")
+        target = RetiringTarget(
+            model_id="gpt-4.1-mini",
+            current_version="2025-04-14",
+            region="swedencentral",
+            workload="general_qa",
+            retirement_date="2026-08-15",
+            days_until_retirement=31,
+            source="fixture",
+            replacement_family="gpt-4.1",
+        )
+        catalog = FixtureCandidateCatalog(
+            REPO_ROOT / "tests" / "fixtures" / "candidate_catalog.yaml"
+        )
+        qs_client = _StubQualitySafetyClient(
+            {
+                "gpt-4.1": QualitySafetyRecord(
+                    model_id="gpt-4.1",
+                    quality_score=0.86,
+                    safety_score=0.96,
+                    provenance="curated-seed: test",
+                    as_of_date="2026-07-22",
+                )
+            }
+        )
+
+        # Act: baseline uses catalog placeholders; enriched overlays benchmarks.
+        baseline = recommend_candidates(config, run_context, target, catalog)
+        result = recommend_candidates(
+            config, run_context, target, catalog, qs_client=qs_client
+        )
+
+        # Assert: benchmark scores flow into ranking and the unlisted model warns.
+        self.assertEqual(len(result.ranked_candidates), 2)
+        baseline_scores = {
+            rank.candidate.model_id: rank.score for rank in baseline.ranked_candidates
+        }
+        enriched_scores = {
+            rank.candidate.model_id: rank.score for rank in result.ranked_candidates
+        }
+        # gpt-4.1 catalog quality/safety (0.95/0.94) differs from the benchmark
+        # override (0.86/0.96), so the benchmarked candidate's score must change.
+        self.assertNotAlmostEqual(
+            enriched_scores["gpt-4.1"], baseline_scores["gpt-4.1"], places=6
+        )
+        # gpt-4.1-nano is unlisted: the source raises, so enrichment degrades to
+        # a warning and leaves that candidate's static catalog scores intact.
+        self.assertAlmostEqual(
+            enriched_scores["gpt-4.1-nano"], baseline_scores["gpt-4.1-nano"], places=6
+        )
+        self.assertTrue(
+            any(
+                "quality/safety eval unavailable for 'gpt-4.1-nano'" in w
+                for w in result.parse_warnings
+            )
+        )
+
+    def test_given_no_qs_client_when_recommending_then_no_quality_safety_warnings(self) -> None:
         # Arrange
         config = load_app_config(HERMETIC_REPO)
         run_context = build_run_context(config, run_id="test-run")

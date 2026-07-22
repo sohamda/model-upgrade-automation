@@ -15,6 +15,10 @@ dependencies = [
 test = [
     "pytest>=7.4",
 ]
+evaluation = [
+    "azure-ai-evaluation[redteam]>=1.18.1",
+    "azure-identity>=1.17",
+]
 
 [tool.setuptools.packages.find]
 include = ["src*"]
