@@ -46,6 +46,26 @@ DEFAULT_MAX_CANDIDATES = 8
 DEFAULT_MIN_SAMPLES = 5
 ALLOWED_ATTACK_STRATEGIES: tuple[str, ...] = ("Baseline", "Jailbreak")
 ASR_CONVENTION = "overall_asr is a percent (0..100); safety folds 1 - asr/100"
+# Azure OpenAI data-plane API version used for judge and candidate inference.
+DEFAULT_INFERENCE_API_VERSION = "2024-10-21"
+
+
+def derive_aoai_endpoint(project_endpoint: str) -> str:
+    """Return the account-level Azure OpenAI host for a Foundry project endpoint.
+
+    The injected project endpoint (e.g.
+    ``https://acct.services.ai.azure.com/api/projects/<name>``) addresses the
+    project data plane, which does not serve the Azure OpenAI inference API used
+    by the quality judges and the candidate response provider. That API lives at
+    the account host, so this strips any path (``/api/projects/...`` and beyond)
+    and returns ``scheme://host[:port]``. Endpoints that cannot be parsed are
+    returned unchanged apart from a stripped trailing slash.
+    """
+
+    parsed = urlparse(project_endpoint)
+    if not parsed.scheme or not parsed.netloc:
+        return project_endpoint.rstrip("/")
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def assert_owned_target(project_endpoint: str, target_endpoint: str) -> None:
@@ -189,6 +209,7 @@ class FoundryQualitySafetyEvalClient:
     probe_prompts: tuple[str, ...] | None = None
     response_provider: Callable[[str, str], str | None] | None = None
     credential: object | None = None
+    inference_api_version: str = DEFAULT_INFERENCE_API_VERSION
 
     def __post_init__(self) -> None:
         # Bounded-scan guardrails run first so they are testable without the
@@ -266,18 +287,26 @@ class FoundryQualitySafetyEvalClient:
             make_credential=DefaultAzureCredential,
         )
 
+    def _aoai_endpoint(self) -> str:
+        """Return the account-level Azure OpenAI host for the owned project."""
+
+        return derive_aoai_endpoint(self.azure_ai_project)
+
     def _judge_model_config(self) -> dict[str, str]:
         """Build the quality-judge model config from the injected deployment.
 
         Derives the config solely from ``self.azure_ai_project`` and
         ``self.judge_model`` so no endpoint or deployment name is hardcoded. The
-        result is passed to the Coherence/Relevance/Fluency evaluators and never
-        carries a credential, key or token.
+        Azure OpenAI account host (not the project data-plane URL) plus the
+        judge deployment and the inference API version are what the
+        Coherence/Relevance/Fluency evaluators require; the config never carries
+        a credential, key or token.
         """
 
         return {
-            "azure_endpoint": self.azure_ai_project,
+            "azure_endpoint": self._aoai_endpoint(),
             "azure_deployment": self.judge_model,
+            "api_version": self.inference_api_version,
         }
 
     def _resolve_target_endpoint(self) -> str:
@@ -465,8 +494,17 @@ class FoundryQualitySafetyEvalClient:
             num_objectives=self.num_objectives,
             attack_strategies=strategies,
         )
+        # The scan target must be an Azure OpenAI model-config dict (account
+        # host + deployment), not a bare string; the SDK reads ``target[...]``
+        # and mints its own AAD token from the RedTeam credential above.
+        scan_target = {
+            "azure_endpoint": self._aoai_endpoint(),
+            "azure_deployment": model_id,
+        }
         result = asyncio.run(
-            red_team.scan(target=target, attack_strategies=strategies, skip_upload=True)
+            red_team.scan(
+                target=scan_target, attack_strategies=strategies, skip_upload=True
+            )
         )
         scorecard = self._extract_scorecard(result)
         if scorecard is None:

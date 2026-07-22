@@ -35,11 +35,13 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from src.evaluator.quality_safety_eval_client import (  # noqa: E402
+    DEFAULT_INFERENCE_API_VERSION,
     DEFAULT_MAX_CANDIDATES,
     DEFAULT_NUM_OBJECTIVES,
     FoundryQualitySafetyEvalClient,
     QualitySafetyEvalClient,
     StubQualitySafetyEvalClient,
+    derive_aoai_endpoint,
     derive_quality_score,
     derive_safety_score,
     has_safety_signal,
@@ -156,6 +158,14 @@ def create_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Content-safety severity threshold T for --live (default: client default).",
+    )
+    parser.add_argument(
+        "--inference-api-version",
+        default=DEFAULT_INFERENCE_API_VERSION,
+        help=(
+            "Azure OpenAI data-plane API version for judge and candidate "
+            f"inference (default: {DEFAULT_INFERENCE_API_VERSION})."
+        ),
     )
     parser.add_argument(
         "--probe-dataset",
@@ -331,31 +341,45 @@ def render_yaml(entries: list[dict[str, object]]) -> str:
 
 
 def _build_live_response_provider(
-    project: str, *, credential: object | None = None
+    project: str,
+    *,
+    credential: object | None = None,
+    api_version: str = DEFAULT_INFERENCE_API_VERSION,
 ) -> "Callable[[str, str], str | None]":
     """Build a string-in/string-out candidate response provider for ``--live``.
 
     Returns a ``(model_id, prompt) -> str | None`` callable that issues a single
-    chat completion against the owned Foundry ``project`` endpoint. The
-    ``azure-ai-inference`` and ``azure-identity`` imports are deferred to the
-    first invocation, so merely constructing the provider never requires the
-    ``[evaluation]`` extra and never touches the network. In this code/data-only
-    pass the provider is built but never invoked (no ``--live`` executed). The
-    scored ``project`` is the same owned endpoint that
+    Azure OpenAI chat completion against the account host derived from
+    ``project`` (the ``/api/projects/<name>`` project path is stripped, since the
+    inference API lives at the account host, not the project data plane). The
+    ``openai`` and ``azure-identity`` imports are deferred to the first
+    invocation, so merely constructing the provider never requires the
+    ``[evaluation]`` extra and never touches the network. The scored host is the
+    same owned endpoint that
     :meth:`FoundryQualitySafetyEvalClient.evaluate_model` validates via
-    ``assert_owned_target`` before any credential is minted, and no key or token
-    is captured here.
+    ``assert_owned_target`` before any credential is minted; the AAD token is
+    minted lazily by the SDK token provider and no key or token is captured here.
     """
 
     def _provider(model_id: str, prompt: str) -> str | None:
-        from azure.ai.inference import ChatCompletionsClient
-        from azure.ai.inference.models import UserMessage
-        from azure.identity import DefaultAzureCredential
+        from azure.identity import (
+            DefaultAzureCredential,
+            get_bearer_token_provider,
+        )
+        from openai import AzureOpenAI
 
         token_credential = credential or DefaultAzureCredential()
-        client = ChatCompletionsClient(endpoint=project, credential=token_credential)
-        result = client.complete(
-            model=model_id, messages=[UserMessage(content=prompt)]
+        token_provider = get_bearer_token_provider(
+            token_credential, "https://cognitiveservices.azure.com/.default"
+        )
+        client = AzureOpenAI(
+            azure_endpoint=derive_aoai_endpoint(project),
+            azure_ad_token_provider=token_provider,
+            api_version=api_version,
+        )
+        result = client.chat.completions.create(
+            model=model_id,
+            messages=[{"role": "user", "content": prompt}],
         )
         choices = getattr(result, "choices", None)
         if not choices:
@@ -418,7 +442,10 @@ def _select_client(
         "num_objectives": args.num_objectives,
         "max_candidates": args.max_candidates,
         "probe_prompts": tuple(record.prompt for record in dataset.records),
-        "response_provider": _build_live_response_provider(project),
+        "response_provider": _build_live_response_provider(
+            project, api_version=args.inference_api_version
+        ),
+        "inference_api_version": args.inference_api_version,
     }
     if args.content_safety_threshold is not None:
         client_kwargs["content_safety_threshold"] = args.content_safety_threshold

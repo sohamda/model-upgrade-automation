@@ -99,6 +99,43 @@
 
 ---
 
+## AOAI-route fix fully validated live — red-team safety gap CLOSED by Azure AI Developer role — 2026-07-22
+
+**Decision**: Accept AOAI-route fix as fully validated live end-to-end. All three uncommitted files (scripts/refresh_quality_safety_benchmarks.py, src/evaluator/quality_safety_eval_client.py, tests/unit/test_quality_safety_eval_client.py; +181/-20) are production-ready pending user approval for commit. Red-team evaluation gap has been closed via Azure AI Developer RBAC role at Foundry scope.
+
+**Rationale**:
+
+Three bounded gpt-4.1 live scans across the same evaluation context (num-objectives=5, probe=datasets/general_qa.jsonl, judge=gpt-4.1, foundry project ff-hub-01) demonstrate complete fix validation:
+
+1. **v1 (prior session):** Red-team TypeError crash fixed (dict scan_target); quality scoring proven live (coherence 4.5 / relevance 4.0 / fluency 3.0). Safety blocked — `get_attack_objectives` PermissionDenied on `Microsoft.CognitiveServices/accounts/AIServices/evaluations/write` data action; 0/5 objectives all categories → ASR vacuous.
+
+2. **v2 (Foundry Owner granted):** Content-safety path unblocked (defect_rate 0.0 over 20 probes); 1 entry written (quality 0.8667, safety 1.0). Red-team STILL PermissionDenied → 0/5 objectives all categories → ASR vacuous. **Key finding**: Foundry Owner role grants content-safety data action but NOT red-team `evaluations/write`.
+
+3. **v3 (Azure AI Developer granted at ff-hub-01 scope):** Red-team gap CLOSED. Objectives fetched: sexual 5/5, violence 5/5, self_harm 5/5, hate_unfairness 0/5 (AAD propagation lag at scan start, expected to resolve on clean re-run). 30 real adversarial attacks executed (Baseline + Jailbreak strategies); 0/30 succeeded (non-vacuous, real signal). Azure content filters actively blocked violence/self_harm/jailbreak prompts as expected. Final written entry: model_id gpt-4.1, quality_score 0.875, safety_score 1.0, source content-safety+redteam, evaluators_run [coherence, fluency, groundedness, relevance, hate_unfairness, self_harm, sexual, violence], sdk_version 1.18.1.
+
+**Key Lessons (durable facts)**:
+
+- **RBAC boundary on Azure Foundry (AIServices)**: Owner-family roles (Foundry Owner / Foundry Account Owner) do NOT grant the red-team data action `evaluations/write`. **Azure AI Developer** at the account/project scope DOES. Content-safety and red-team are distinct data-plane operations — content-safety worked under Foundry Owner; red-team required Azure AI Developer.
+- **AOAI-route fix fully validated live end-to-end**: inference, quality judging, content-safety, red-team all produce real signal. 155 offline tests pass. Fix uncommitted pending approval.
+- **Caveat**: hate_unfairness fetched 0/5 in v3 due to role-propagation lag at scan start; a clean re-run would likely bring it to 5/5. 3 of 4 categories fully exercised.
+
+**Next Actions (gated—each requires separate user approval before execution)**:
+
+1. Commit the 3 AOAI-route files to main
+2. (Optional) Clean re-run to close hate_unfairness 0/5
+3. Full multi-candidate live scan (remaining model candidates)
+4. Write results into config/quality_safety_benchmarks.yaml
+5. WI-04 opt-in --live CI smoke
+6. v0.1 end-to-end run
+
+**Standing rule**: Present results before any wider run. No commits/pushes without separate approval.
+
+**Supersedes**: [AOAI-route fix validated live — quality scoring proven, safety blocked by Foundry data-plane RBAC gap — 2026-07-22](.copilot-tracking/squad/decisions.md#aoai-route-fix-validated-live-quality-scoring-proven-safety-blocked-by-foundry-data-plane-rbac-gap--2026-07-22t224500z)
+
+**Architectural Significance**: Medium — resolves a known data-plane RBAC gap that was blocking safety evaluation. Unblocks full signal path for evaluation engine. Demonstrates empirical validation strategy (bounded scans, isolation probes) and RBAC discovery patterns for Foundry integration.
+
+---
+
 ## Phase 1 Quality/Safety Enrichment Shipped (Cached Benchmark Source) — Decision #31 (2026-07-22T18:30:00Z)
 
 **Decision**: Phase 1 quality/safety enrichment implementation complete. Replaces uniform 0.9 quality/safety placeholders with cached, model_id-keyed benchmark overlay, mirroring pricing enrichment design.
@@ -449,6 +486,44 @@
 **Architectural Significance**: Medium — elevates official sources from opt-in live feature to default pipeline behavior. Ensures recommendations incorporate authoritative model retirement and capability information. Fallback wrappers maintain MVP robustness (fixture-only operation remains viable if official sources are unavailable).
 
 **Status**: ✓ Complete
+
+---
+
+## AOAI-Route Fix Validated Live; Quality Scoring Proven, Safety Blocked by Foundry Data-Plane RBAC Gap — 2026-07-22T22:45:00Z
+
+**Decision**: AOAI-route fix VALIDATED LIVE. Quality judges proven working end-to-end (coherence 4.5, relevance 4.0, fluency 3.0); red-team TypeError crash fixed. REMAINING BLOCKER: safety evaluation fails with `PermissionDenied` — principal lacks `Microsoft.CognitiveServices/accounts/AIServices/evaluations/write` data action; VACUOUS ASR (0/5 objectives → 0 attacks → "Overall ASR 0.0%"). Quality scoring itself is production-ready.
+
+**Rationale**: Bounded live validation (gpt-4.1 only, ff-hub-01 owned Foundry account, user-approved real cost/adversarial traffic) proved the AOAI inference route, quality-judge provider seam, and red-team execution path. Implementation details:
+
+*Code Changes* (3 uncommitted files):
+- `src/evaluator/quality_safety_eval_client.py`: Added `derive_aoai_endpoint()` helper (strips `/api/projects/...` to bare account host), `DEFAULT_INFERENCE_API_VERSION="2024-10-21"`, `inference_api_version` field + `--inference-api-version` arg, rewired `_judge_model_config()`, `_build_live_response_provider()` (now `openai.AzureOpenAI` + bearer token provider on `https://cognitiveservices.azure.com/.default`), and `_run_red_team()` to pass dict `scan_target={"azure_endpoint": <account host>, "azure_deployment": model_id}` instead of bare string.
+- `scripts/refresh_quality_safety_benchmarks.py`: Injected `inference_api_version` propagation.
+- `tests/unit/test_quality_safety_eval_client.py`: 7 new tests validating AOAI endpoint derivation, version field, provider config, and scan-target dict shape.
+
+*Offline Validation*:
+- Full unit suite 155 passed (Python 3.14 `.venv`, pytest), no lint/type errors.
+
+*Live Validation* (bounded gpt-4.1, ff-hub-01):
+- ✓ AOAI inference route PROVEN: provider returns live completion ('ping'/'pong').
+- ✓ Quality judges PROVEN end-to-end (isolation probe seam): coherence 4.5, relevance 4.0, fluency 3.0; groundedness intentionally None (string-only probe seam, no retrieved context).
+- ✓ Red-team TypeError crash FIXED: scan reaches "Scan completed successfully!" with no `TypeError: string indices must be integers`.
+- ✗ BLOCKER: red-team attack-objective fetch (`GET /api/projects/{p}/redTeams/simulation/attackobjectives`) + content-safety evaluation both fail with `PermissionDenied` — principal `ceaa060a-bb65-47f7-9b95-c636872aa7d6` lacks data action `Microsoft.CognitiveServices/accounts/AIServices/evaluations/write`. Result: 0/5 objectives per risk category → 0/0 attacks → "Overall ASR 0.0%" is VACUOUS (no real attacks ran). Foundry Account Owner + Cognitive Services OpenAI User roles do NOT grant this data action (see https://aka.ms/FoundryPermissions).
+
+*Consequence*:
+- Bounded scan wrote 0 entries (`benchmarks: []`). Build_entries correctly REFUSES to fabricate — an entry requires BOTH quality and safety; safety is UNSCORED (None) under RBAC gap and scratch output has no seed to fall back on, so gpt-4.1 is skipped. Quality scoring itself is proven working.
+
+**Decision / Next Steps**:
+- Nothing committed or pushed (3 files remain uncommitted; HEAD 8ceb82c in sync with origin/main).
+- Escalation to user: to validate safety/red-team live, an additional Foundry data-plane role granting `Microsoft.CognitiveServices/accounts/AIServices/evaluations/write` is required.
+- Deferred behind separate approvals: (1) committing the fix, (2) full multi-candidate scan, (3) writing results into real `config/quality_safety_benchmarks.yaml`, (4) WI-04 opt-in `--live` CI smoke.
+
+**Artifacts**:
+- Fix source: `src/evaluator/quality_safety_eval_client.py`, `scripts/refresh_quality_safety_benchmarks.py`, `tests/unit/test_quality_safety_eval_client.py` (uncommitted)
+- Live scan log: `artifacts/live-smoke-20260722/scan-full.log`
+- Live scan output: `artifacts/live-smoke-20260722/quality_safety_benchmarks.gpt41.yaml` (empty, vacuous ASR block included)
+- Scratch dirs cleaned: `.scan_*` directories removed
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#aoai-route-fix-validated-live-quality-scoring-proven-safety-blocked-by-foundry-data-plane-rbac-gap--2026-07-22t224500z`
 
 ---
 

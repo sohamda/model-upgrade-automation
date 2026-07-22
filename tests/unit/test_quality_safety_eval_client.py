@@ -12,6 +12,7 @@ from src.evaluator.quality_safety_eval_client import (
     ALLOWED_ATTACK_STRATEGIES,
     ASR_CONVENTION,
     DEFAULT_CONTENT_SAFETY_THRESHOLD,
+    DEFAULT_INFERENCE_API_VERSION,
     DEFAULT_NUM_OBJECTIVES,
     NUM_OBJECTIVES_CEILING,
     FoundryQualitySafetyEvalClient,
@@ -20,6 +21,7 @@ from src.evaluator.quality_safety_eval_client import (
     assert_owned_target,
     clamp01,
     compute_defect_rate,
+    derive_aoai_endpoint,
     derive_quality_score,
     derive_safety_score,
     has_safety_signal,
@@ -581,6 +583,100 @@ class EvaluateModelUnderSampleTests(unittest.TestCase):
 
         self.assertIsNone(signals.content_safety_defect_rate)
         self.assertEqual(signals.content_safety_sample_size, 3)
+
+
+class DeriveAoaiEndpointTests(unittest.TestCase):
+    def test_given_project_path_when_deriving_then_strips_to_account_host(
+        self,
+    ) -> None:
+        self.assertEqual(
+            derive_aoai_endpoint(
+                "https://acct.services.ai.azure.com/api/projects/proj-1"
+            ),
+            "https://acct.services.ai.azure.com",
+        )
+
+    def test_given_account_host_when_deriving_then_unchanged(self) -> None:
+        self.assertEqual(
+            derive_aoai_endpoint("https://acct.services.ai.azure.com"),
+            "https://acct.services.ai.azure.com",
+        )
+
+    def test_given_trailing_slash_host_when_deriving_then_normalized(self) -> None:
+        self.assertEqual(
+            derive_aoai_endpoint("https://acct.services.ai.azure.com/"),
+            "https://acct.services.ai.azure.com",
+        )
+
+    def test_given_unparseable_value_when_deriving_then_returned_unchanged(
+        self,
+    ) -> None:
+        self.assertEqual(derive_aoai_endpoint("not-a-url"), "not-a-url")
+
+
+class JudgeModelConfigTests(unittest.TestCase):
+    def test_given_project_url_when_building_config_then_account_host_and_version(
+        self,
+    ) -> None:
+        client = _foundry(None, None)
+
+        config = client._judge_model_config()
+
+        self.assertEqual(config["azure_endpoint"], "https://owned.example")
+        self.assertNotIn("/api/projects", config["azure_endpoint"])
+        self.assertEqual(config["azure_deployment"], "judge-1")
+        self.assertEqual(config["api_version"], DEFAULT_INFERENCE_API_VERSION)
+
+    def test_given_override_version_when_building_config_then_threaded(self) -> None:
+        with _allow_azure_import():
+            client = FoundryQualitySafetyEvalClient(
+                azure_ai_project="https://owned.example/api/projects/p",
+                judge_model="judge-1",
+                inference_api_version="2025-01-01-preview",
+                credential=object(),
+            )
+
+        self.assertEqual(
+            client._judge_model_config()["api_version"], "2025-01-01-preview"
+        )
+
+
+class RunRedTeamTargetTests(unittest.TestCase):
+    def test_given_scan_when_running_then_target_is_account_host_model_dict(
+        self,
+    ) -> None:
+        captured: dict[str, object] = {}
+
+        class _FakeResult:
+            def to_scorecard(self) -> dict[str, object]:
+                return {"overall_asr": 10.0, "risk_category_summary": {}}
+
+        class _FakeRedTeam:
+            async def scan(
+                self, *, target: object, attack_strategies: object, skip_upload: bool
+            ) -> _FakeResult:
+                captured["target"] = target
+                captured["skip_upload"] = skip_upload
+                return _FakeResult()
+
+        sdk = SimpleNamespace(
+            attack_strategy=SimpleNamespace(Baseline="B", Jailbreak="J"),
+            red_team=lambda **kwargs: _FakeRedTeam(),
+        )
+        client = _foundry(("p1",), lambda model_id, prompt: "resp")
+
+        client._run_red_team(
+            sdk, object(), "gpt-4.1", "https://owned.example/api/projects/p"
+        )
+
+        self.assertEqual(
+            captured["target"],
+            {
+                "azure_endpoint": "https://owned.example",
+                "azure_deployment": "gpt-4.1",
+            },
+        )
+        self.assertTrue(captured["skip_upload"])
 
 
 class ResolveEvaluatorScoreTests(unittest.TestCase):

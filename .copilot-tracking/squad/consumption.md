@@ -41,11 +41,13 @@ Estimated cost per dispatched role. All figures are **estimated, not billed**.
 | Task Researcher (Council wi-03) | claude-3-haiku | tier-1 | 4,000 | 0 | 2,000 | $0.0112 | 1.12 |
 | Task Implementor (WI-03 implementation) | claude-3-5-sonnet | default | 6,500 | 0 | 3,800 | $0.0765 | 7.65 |
 | Task Reviewer (WI-03 re-validation cycle-1) | claude-3-haiku | tier-1 | 4,500 | 0 | 2,200 | $0.0124 | 1.24 |
-| **Run Total** | | | **351,300** | **0** | **166,750** | **$2.51944** | **271.958** |
+| Evaluation + Quality Engineer: AOAI-Route Fix Live Validation | claude-3-5-sonnet | default | 8,000 | 0 | 4,500 | $0.0915 | 9.15 |
+| Evaluation + Quality Engineer: AOAI-Route Fix v3 Re-Validation | claude-3-5-sonnet | default | 15,000 | 0 | 8,000 | $0.1650 | 16.50 |
+| **Run Total** | | | **374,300** | **0** | **179,250** | **$2.77594** | **297.608** |
 
 ## Cost Comparison
 
-**Squad dispatch total**: $2.51944 → 271.958 credits (after WI-03 implementation + re-validation cycle-1 completion: +$0.0889 from Task Implementor + Task Reviewer; cumulative through all 38 decisions and 74 total dispatches)
+**Squad dispatch total**: $2.77594 → 297.608 credits (after AOAI-route v3 re-validation dispatch: +$0.1650 from Evaluation + Quality Engineer; cumulative through all 40 decisions and 76 total dispatches)
 
 **Baseline single-model iteration** (1-hour interactive, 1 human + 1 tier-1 agent): ~$0.32 (32 credits)
 
