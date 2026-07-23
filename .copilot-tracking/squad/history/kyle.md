@@ -198,6 +198,47 @@ Known limitations:
 - Model Tier: default
 - Input Tokens: 5,000
 - Cached Tokens: 0
+- Output Tokens: 1,500
+- Input Rate: $3.00 per 1M
+- Cached Rate: $0.30 per 1M
+- Output Rate: $15.00 per 1M
+- Est. Cost USD: 0.0375
+- Est. Credits: 3.75
+- Basis: estimated
+
+---
+
+## 2026-07-23T21:45:00Z Dispatch: OIDC Identity Re-Establishment + Least-Privilege RBAC + GitHub Variables (User-Approved Impactful)
+
+**Agent**: Security Planner (role: Security/Identity + Governance Lead)  
+**Member Name**: Kyle  
+**Request**: "EXECUTE OIDC identity re-establishment + least-privilege RBAC + 9 Group A GitHub variables (user-approved impactful)."
+
+**Outcome**: ✓ EXECUTED (real Azure/GitHub mutations, all user-approved)
+
+**Key Actions Executed**:
+- New app registration `mua-github-oidc` in tenant 1d97ac0b-… with app ID `ea6ff70a-e4fb-48cf-98d9-86dfa3d046db`, SP objectId `dba88227-a0ce-4b53-b70d-923f0ec64f4f`
+- Federated credential `gh-main` bound to repo:sohamda/model-upgrade-automation:ref:refs/heads/main (secretless)
+- Least-privilege RBAC on SP: Cognitive Services Contributor + User @ ff-hub-01, Reader @ RG ai-resources (no RG Contributor)
+- 9 Group A GitHub variables set: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, RESOURCE_GROUP, FOUNDRY_ACCOUNT_NAME, FOUNDRY_PROJECT_NAME, ALLOWED_REGIONS, FOUNDRY_PROJECT_ENDPOINT, JUDGE_MODEL
+- Verified via read-only az/gh queries; no workflow triggered; no provisioning
+
+**Consequence**: Stage 1 live run now **UNBLOCKED** (ff-hub-01 publicly reachable)
+
+**Verification**: ✓ App reg exists in Azure; ✓ federated credential retrievable; ✓ RBAC roles assigned; ✓ 9 Group A vars in repo
+
+**Consumption Block**:
+- Model: claude-3-5-sonnet
+- Model Tier: default
+- Input Tokens: 6,000
+- Cached Tokens: 0
+- Output Tokens: 2,600
+- Input Rate: $3.00 per 1M
+- Cached Rate: $0.30 per 1M
+- Output Rate: $15.00 per 1M
+- Est. Cost USD: 0.057
+- Est. Credits: 5.7
+- Basis: tier-default
 - Output Tokens: 1,600
 - Input Rate: $3.00 per 1M
 - Cached Rate: $0.30 per 1M
@@ -205,3 +246,66 @@ Known limitations:
 - Est. Cost USD: $0.0390
 - Est. Credits: 3.90
 - Basis: estimated
+
+---
+
+## 2026-07-23T00:00:00Z Dispatch: Full Live-Run Prep — OIDC Re-Establishment + Group B Resource Discovery (Security Planner)
+
+**Agent**: Security Planner
+**Role**: Security/Identity + Governance Lead
+**Member**: Kyle
+**Request**: Read-only discovery of new-subscription resources, OIDC identity audit, and generation of staged live-run escalation runbook with least-privilege RBAC for full detect-and-eval live run.
+
+**Outcome**: ✓ Complete (Read-only, no mutations)
+
+**Discovery Findings**:
+
+*Group A (Environment Ready)*:
+- Foundry Hub: ff-hub-01 (AIServices, swedencentral)
+- Foundry Project: ff-proj-001, endpoint https://ff-hub-01.services.ai.azure.com/api/projects/ff-proj-001
+- Deployments: gpt-4.1 (2025-04-14), gpt-5.6-sol (2026-07-09) — recommend judge_model=gpt-4.1
+- Environment variable map: FOUNDRY_HUB_NAME, FOUNDRY_PROJECT_NAME, FOUNDRY_ENDPOINT, JUDGE_MODEL, SUBSCRIPTION_ID, RESOURCE_GROUP, TENANT_ID
+
+*Group B (MISSING — Provision-First Blockers)*:
+- ACA_ENVIRONMENT_NAME: 0 instances
+- ACA_JOB_NAME: 0 instances
+- STORAGE_ACCOUNT_NAME: 0 instances
+- KEY_VAULT_NAME: 0 instances
+
+*OIDC Identity Assessment*:
+- New-tenant app registration gap: no mua-github-oidc app exists
+- Recommended app: mua-github-oidc with FIC subject repo:sohamda/model-upgrade-automation:ref:refs/heads/main
+- Least-privilege RBAC: Cognitive Services Contributor @ ff-hub-01, Cognitive Services User @ ff-hub-01, Reader @ ai-resources RG
+
+*Security Flags*:
+- ff-hub-01 publicNetworkAccess=Enabled violates private-only contract (expected Disabled)
+- Storage/KV/ACA private-endpoint posture unverified
+- Recommend scoped roles over Contributor-on-RG
+
+**Staged Escalation Framework**:
+- Stage 0: dry_run=true (free, OIDC validation)
+- Stage 1: live discovery + live_catalog (free, read-only)
+- Stage 2: provision_candidates=true ($50–150 estimated)
+- Stage 3: run_evals=true ($100–300 estimated, BLOCKED until ACA provisioned)
+
+**Artifacts Delivered**:
+- `.copilot-tracking/squad/live-run-prep-oidc-runbook.md` — Step-by-step commands (app registration, FIC, RBAC, gh variable, workflow trigger)
+- `.copilot-tracking/squad/live-run-prep-d44.md` — Durable resume point with Group A/B resource inventory, environment variable map, OIDC gap analysis, RBAC recommendation, staged escalation details, contract violation flag
+
+**Validation Status**:
+- ✓ Read-only discovery: zero mutations, zero resource creates/modifies
+- ✓ Command generation: all runbook commands verified as syntax-valid
+- ✓ Docs: markdown lint clean, structure ready for user handoff
+
+**Consumption Block**:
+- Model: claude-3-haiku
+- Model Tier: tier-1
+- Input Tokens: 7,200
+- Cached Tokens: 0
+- Output Tokens: 5,200
+- Input Rate: $0.80 per 1M
+- Cached Rate: $0.08 per 1M
+- Output Rate: $4.00 per 1M
+- Est. Cost USD: $0.02656
+- Est. Credits: 2.656
+- Basis: tier-default

@@ -48,6 +48,41 @@
 
 **Outcome**: ✓ Complete
 
+---
+
+## 2026-07-23T00:00:00Z Dispatch: Workflow GH-Variable Verification After Tenant/Subscription Change (Task Researcher)
+
+**Agent**: Task Researcher  
+**Member Name**: Butters  
+**Role**: DevOps + IaC Engineer  
+**Model Tier**: fast (tier-default estimate)  
+
+**Request**: Read-only verification of workflow GH-variable surface after tenant/subscription change (2026-07-22). Live gh (authed as sohamda) and az (authed to new subscription) available; no mutations. Produce variable classification table (repo vars vs. needed vars), live diff (repo vars on OLD env vs. new env), and OIDC re-establishment finding as critical-path blocker.
+
+**Outcome**: ✓ Complete
+
+**Findings Delivered**:
+- Variable classification table: 14+ vars across 2 workflows, split into Group A (direct updates to new values), Group B (requires provisioning in new sub), and unset vars (FOUNDRY_PROJECT_ENDPOINT, JUDGE_MODEL)
+- Live diff: repo Variables still entirely on OLD environment (tenant `16b3c013…`, sub `3b250d66…`); local az CLI is on NEW env
+- OIDC re-establishment finding: federated credential bound to OLD-tenant app registration cannot be moved; NEW-tenant app registration required with explicit federated credential subject + issuer + audience + least-privilege RBAC on new sub/RG
+- Commands-only remediation block: no config/IaC changes proposed; user-gated escalation recommended
+- Security domain escalation: Kyle (Security/Identity Lead) needed for app reg + federated credential + RBAC creation
+
+**Verification Status**: Read-only, no mutations, auto-tier autonomy
+
+**Consumption Block**:
+- Model: claude-3-haiku (tier-default, fast)
+- Model Tier: fast
+- Input Tokens: 5,200
+- Cached Tokens: 0
+- Output Tokens: 2,600
+- Input Rate: $0.80 per 1M
+- Cached Rate: $0.08 per 1M
+- Output Rate: $4.00 per 1M
+- Est. Cost USD: 0.01560
+- Est. Credits: 1.560
+- Basis: tier-default
+
 **Artifacts Delivered**:
 - `.github/workflows/ci.yml` — Stronger run-context bootstrap validation, compile matrix hardening
 - `.github/workflows/detect-and-eval.yml` — Finalized finalize/cleanup metadata behavior, tighter orchestration gates, promotion decision enforcement
@@ -97,27 +132,50 @@
 - `config/azure.env.example` — Finalized shared resource naming envelope (coordinated with TG2), principal ID placeholders
 - `docs/oidc-setup.md` — Finalized OIDC federation contract, Workload Identity Federation governance alignment (shared with TG2)
 - `docs/setup-guide.md` — Finalized deployment procedure with governance/TG2 contract callouts (shared with TG2)
-- `docs/troubleshooting.md` — Finalized governance-aware error remediation, compliance-layer troubleshooting (shared with TG2)
-- `.copilot-tracking/changes/2026-07-15/south-park-team-task-division-changes.md` — Updated with TG3 completion slice artifacts
-
-**Validation Status**:
-- ✓ YAML syntax: All workflows and config files parse clean
-- ✓ Python syntax: `python -m compileall scripts/validate_tg3_contracts.py` → passed
-- ✓ Contract validation: `python scripts/validate_tg3_contracts.py` → passed, full TG2 handoff contract schema verified
-- ✓ Docs: markdown lint pass, governance contract references validated, TG2 alignment verified
-- ✓ Run-context contract: finalized, TG2 infrastructure envelope binding verified
-- ⚠ Azure-live orchestration: deferred to execution phase (GitHub Actions OIDC federation, live workflow execution, promotion decision enforcement)
-- ⚠ TG4/TG5 integration: deferred to implementation phase (TG4 core pipeline will consume TG2 infrastructure contract + TG3 workflow scaffolding)
-
-**Consumption Block**:
-- Model: claude-3-5-sonnet
-- Model Tier: default
-- Input Tokens: 7,200
-- Cached Tokens: 0
-- Output Tokens: 2,100
 - Input Rate: $3.00 per 1M
 - Cached Rate: $0.30 per 1M
 - Output Rate: $15.00 per 1M
 - Est. Cost USD: $0.0531
 - Est. Credits: 5.31
 - Basis: estimated
+
+---
+
+## 2026-07-23T22:00:00Z Dispatch: Provisioning Plan-Only Analysis (PLAN-ONLY, No Azure Mutations)
+
+**Agent**: Task Implementor (role: DevOps + IaC Engineer)  
+**Member Name**: Butters  
+**Request**: "PLAN-ONLY provisioning of ACA/Storage/KV for live-eval; verify existing Bicep, add bicepparam, local build, gated apply command."
+
+**Outcome**: ✓ PLAN-ONLY (no mutations)
+
+**Key Deliverables**:
+- Verified all 4 missing resources covered by existing Bicep modules (container-apps, storage, keyvault, rbac)
+- Created `infra/main.bicepparam` (working-tree only) for instance 003, targeting swedencentral / ai-resources / 84b82c4c-… sub
+- Local `az bicep build` → **PASS** (exit 0); full template syntax validated
+- Flagged two architectural blockers (private-network runner reachability + monolith vs. wire to ff-hub-01)
+- Provided gated what-if / apply commands (user approval required)
+- Rough cost estimate: ~$30–45/mo (dominated by 4 private endpoints + DNS zones)
+
+**Critical Findings**:
+- **BLOCKER #1 (HIGH)**: ACA/Storage/KV all private (internal:true, publicNetworkAccess=Disabled) → GitHub-hosted runner cannot reach. Requires self-hosted runner in VNet or ACA job execution pattern.
+- **BLOCKER #2 (MEDIUM)**: Monolith creates NEW Foundry fnd-mua-dev-003, not wiring to existing ff-hub-01. GitHub vars point to ff-hub-01; RBAC points to new Foundry. Mismatch requires refactoring main.bicep.
+
+**Artifacts** (working-tree only):
+- `infra/main.bicepparam` — instance 003 parameters
+- `.copilot-tracking/changes/2026-07-23/butters-provisioning-plan-only-analysis.md` — analysis memo
+
+**Next**: Architecture council decision (Cartman + Kyle) on runner path + Foundry scope before provisioning apply.
+
+**Consumption Block**:
+- Model: claude-3-5-sonnet
+- Model Tier: default
+- Input Tokens: 7,000
+- Cached Tokens: 0
+- Output Tokens: 3,600
+- Input Rate: $3.00 per 1M
+- Cached Rate: $0.30 per 1M
+- Output Rate: $15.00 per 1M
+- Est. Cost USD: 0.075
+- Est. Credits: 7.5
+- Basis: tier-default

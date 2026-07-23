@@ -9,7 +9,7 @@ Estimated cost per dispatched role. All figures are **estimated, not billed**.
 | MVP Product/Tech Integrator | claude-3-5-sonnet | default | 8,500 | 0 | 2,200 | $0.0585 | 5.85 |
 | Security/Identity + Governance Lead | claude-3-5-sonnet | default | 36,400 | 0 | 10,700 | $0.2697 | 26.97 |
 | DevOps + IaC Engineer | claude-3-5-sonnet | default | 26,500 | 0 | 7,600 | $0.1935 | 19.35 |
-| Python Delivery Lead (Core pipeline) | claude-3-5-sonnet | default | 72,900 + 6,500 | 0 | 24,700 + 3,800 | $0.5892 + 0.0765 | 58.92 + 7.65 |
+| Python Delivery Lead (Core pipeline) | claude-3-5-sonnet | default | 86,600 | 0 | 31,500 | $0.7323 | 73.23 |
 | Evaluation + Quality Engineer | mixed (default + tier-1) | default / tier-1 | 18,700 + 4,500 | 0 | 6,200 + 2,200 | $0.1337 + 0.0124 | 13.37 + 1.24 |
 | Platform Reliability + SRE Lead | claude-3-haiku | tier-1 | 8,700 | 0 | 3,900 | $0.0226 | 2.26 |
 | Squad Scribe | claude-3-haiku | tier-1 | 27,500 | 0 | 8,950 | $0.05744 | 5.744 |
@@ -43,11 +43,16 @@ Estimated cost per dispatched role. All figures are **estimated, not billed**.
 | Task Reviewer (WI-03 re-validation cycle-1) | claude-3-haiku | tier-1 | 4,500 | 0 | 2,200 | $0.0124 | 1.24 |
 | Evaluation + Quality Engineer: AOAI-Route Fix Live Validation | claude-3-5-sonnet | default | 8,000 | 0 | 4,500 | $0.0915 | 9.15 |
 | Evaluation + Quality Engineer: AOAI-Route Fix v3 Re-Validation | claude-3-5-sonnet | default | 15,000 | 0 | 8,000 | $0.1650 | 16.50 |
-| **Run Total** | | | **374,300** | **0** | **179,250** | **$2.77594** | **297.608** |
+| Task Researcher (Workflow GH-Variable Verification) | claude-3-haiku | tier-1/fast | 5,200 | 0 | 2,600 | $0.01560 | 1.560 |
+| Security/Identity + Governance Lead (Full Live-Run Prep) | claude-3-haiku | tier-1 | 7,200 | 0 | 5,200 | $0.02656 | 2.656 |
+| Security/Identity + Governance Lead (OIDC Re-Establishment + RBAC) | claude-3-5-sonnet | default | 6,000 | 0 | 2,600 | $0.057 | 5.7 |
+| DevOps + IaC Engineer (Provisioning Plan-Only Analysis) | claude-3-5-sonnet | default | 7,000 | 0 | 3,600 | $0.075 | 7.5 |
+| Researcher Subagent (Azure Retail Prices swedencentral) | claude-3-haiku | tier-1/fast | 4,500 | 0 | 1,900 | $0.0112 | 1.12 |
+| **Run Total** | | | **411,400** | **0** | **198,150** | **$3.02790** | **322.740** |
 
 ## Cost Comparison
 
-**Squad dispatch total**: $2.77594 → 297.608 credits (after AOAI-route v3 re-validation dispatch: +$0.1650 from Evaluation + Quality Engineer; cumulative through all 40 decisions and 76 total dispatches)
+**Squad dispatch total**: $2.85814 → 305.764 credits (after gpt-4.1 retirement fixture and detector alignment: +$0.0666 from Python Delivery Lead; cumulative through all 43 decisions and 80 total dispatches; latest: Butters GH-variable verification $0.0156)
 
 **Baseline single-model iteration** (1-hour interactive, 1 human + 1 tier-1 agent): ~$0.32 (32 credits)
 

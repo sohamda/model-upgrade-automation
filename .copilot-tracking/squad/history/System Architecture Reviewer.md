@@ -97,3 +97,49 @@ Assess architecture soundness for WI-03 live quality/content-safety evaluation h
 - est_cost_usd: 0.069
 - est_credits: 6.9
 - basis: tier-default
+
+---
+
+## Council Dispatch: Infra Provisioning + Live Run (2026-07-23)
+
+**Council Verdict Topic**: infra-provisioning-live-run
+
+**Request**: 
+Assess architecture soundness for provisioning infrastructure from infra/main.bicep (instance 003) and executing full live detect-and-eval pipeline. Evaluate:
+- Monolith vs. wire-to-existing fork decision (new Foundry fnd-mua-dev-003 vs. existing ff-hub-01 binding)
+- Private-network runner reachability (GitHub-hosted runner cannot reach private endpoints; self-hosted vs. ACA job vs. bastion)
+- Resource composition and module scoping (43 resources, subscription-scope policies, capability for multi-region)
+- ADR-readiness of design decisions (when should architecture forks be captured as formal ADRs)
+
+**Findings**:
+
+**Verdict**: Go-With-Conditions / Medium risk
+
+**Architecture Assessment**: The monolith Bicep design is well-structured and comprehensive. Both identified architecture forks (Foundry scope + runner reachability) are valid paths with different trade-offs. Neither fork represents a structural API misalignment or scalability problem. Risk is organizational alignment (design intent clarity), not technical.
+
+**Binding Conditions**:
+1. **Architecture Decision #1 — Monolith Fork**: Resolve Foundry scope before apply — either Option A (refactor to wire existing ff-hub-01, preferred, reduces resource duplication) or Option B (deploy new fnd-mua-dev-003, accept duplication, update variables). Document decision + rationale.
+2. **Architecture Decision #2 — Private-Network Runner**: Resolve runner reachability before Stage 2 provisioning — self-hosted runner in VNet (preferred, aligns with private-network design), ACA job with MI (asynchronous), or bastion/jump-box (operational complexity). Document decision + implementation plan.
+3. **Module Composition**: Preserve hierarchical module structure (networking, monitoring, storage, keyvault, foundry, container-apps, rbac); no monolith flattening into single main.bicep resource list (would lose organization).
+4. **Subscription-Scope Policies**: Document policy assignment scoping and exemption criteria (current: audit-only, non-blocking). Enforce in production via Policy initiative assignment at subscription scope with proper change control.
+5. **ADR Capture**: Both architecture forks (#1, #2) warrant ADRs once decisions made — document context, options considered, decision, consequences, and when/how to revisit.
+6. **Multi-Region Capability**: Current scoping (swedencentral only) is acceptable for MVP; future regions require variable parameterization (location list, per-region SKU variants, global load balancer). Defer to post-live-run hardening.
+
+**Residual Risk**: Organizational alignment on design forks (not structural API risk). Both decision paths are sound; clarity required on which fork is chosen.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#council-verdict-2026-07-23-infra-provisioning-live-run`
+
+---
+
+**Consumption** (this dispatch):
+- model: claude-3-5-sonnet
+- model_tier: default
+- input_tokens: 12000
+- cached_tokens: 0
+- output_tokens: 4500
+- input_rate: 3.00
+- cached_rate: 0.30
+- output_rate: 15.00
+- est_cost_usd: 0.102
+- est_credits: 10.2
+- basis: tier-default

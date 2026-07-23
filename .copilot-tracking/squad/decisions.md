@@ -136,6 +136,34 @@ Three bounded gpt-4.1 live scans across the same evaluation context (num-objecti
 
 ---
 
+## gpt-4.1 Retirement Fixture Added + Detector Test Aligned — Offline Alternatives Preview (2026-07-23)
+
+**Decision**: Add gpt-4.1 retiring entry to offline fallback fixture (tests/fixtures/retirement_signals.yaml) and align detector unit test to validate offline dry-run preview path, enabling GitHub workflow execution with gpt-4.1 alternatives surfaced to user.
+
+**Goal**: Let the offline/dry-run detect-and-eval path treat the watched model `gpt-4.1` as retiring so the recommender surfaces ranked alternatives (user wants to run the GitHub workflow and see gpt-4.1 alternatives).
+
+**Changes**:
+
+1. **Fixture edit**: Added `gpt-4.1` retiring entry (current_version 2025-04-14, retirement_date 2026-08-15, replacement_family gpt-4.1, source fixture) as the first item in `tests/fixtures/retirement_signals.yaml`. This is the shared offline fallback fixture (`build_default_fixture`) used when ARM/Learn live sources are unavailable.
+
+2. **Detector test alignment**: Aligned `tests/unit/test_detector_service.py::test_given_unmatched_retirement_signal_when_detecting_then_emits_warning` — expected `parse_warnings` count 1→2, and replaced the `[0].code` check with an `all(... == "unwatched_retirement_signal")` check, because the hermetic test config watches `gpt-4.1-mini` (not `gpt-4.1`), so both `gpt-4.1` and `ignored-model` are now unwatched. Test intent preserved; no weakening.
+
+**Verification**: 
+- Local dry-run `python -m src.orchestrator.cli --fixture tests/fixtures/retirement_signals.yaml --catalog tests/fixtures/candidate_catalog.yaml --run-id preview-gpt41-alternatives --top-k 3` ranked: 
+  - (1) gpt-4.1-mini 2026-01-12 swedencentral ProvisionedManaged score 0.865
+  - (2) gpt-4.1-nano 2026-02-01 swedencentral DataZoneStandard 0.844
+  - (3) gpt-4.1 2026-01-12 eastus DataZoneStandard 0.827
+  - Weights quality 0.5 / safety 0.3 / cost 0.2
+- `pytest tests/unit` → 155 passed, 0 failed
+
+**Design note flagged (not fixed)**: The offline fallback fixture and detector unit test share the same file, so fixture edits ripple into test expectations.
+
+**Autonomy**: confirm-tier, user-approved (Option B chosen by user). Reversible (fixture + one test assertion).
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#gpt-41-retirement-fixture-added--detector-test-aligned--offline-alternatives-preview-2026-07-23`
+
+---
+
 ## Phase 1 Quality/Safety Enrichment Shipped (Cached Benchmark Source) — Decision #31 (2026-07-22T18:30:00Z)
 
 **Decision**: Phase 1 quality/safety enrichment implementation complete. Replaces uniform 0.9 quality/safety placeholders with cached, model_id-keyed benchmark overlay, mirroring pricing enrichment design.
@@ -219,6 +247,188 @@ Three bounded gpt-4.1 live scans across the same evaluation context (num-objecti
   - C11: Error/timeout/zero-sample → None (unscored) → seed fallback; min-sample guard ✓
   - C12: Provenance stamp (T=3, ASR percent→fraction, sdk_version, evaluators_run, scored_deployment, scan_date, num_objectives/strategies) ✓
   - C13: Auditable entry (same fields as C12) ✓
+
+---
+
+## Decision #45: OIDC Identity Re-Established (EXECUTED) + Provisioning Plan Ready; Full Live-Eval Run Blocked by Private-Network Architecture Fork (2026-07-23)
+
+**Decision**: User authorized options 2 + 3. Kyle EXECUTED impactful OIDC re-establishment with least-privilege RBAC; Butters produced a PLAN-ONLY provisioning package (applied nothing). Stage 1 live discovery + live_catalog path now unblocked; full live-eval run held pending architecture decision on private-network runner reachability + monolith vs. wire-to-existing-Foundry fork.
+
+**Context**: Tenant/subscription change (2026-07-22) invalidated prior OIDC setup. Stage 1 live run (discover gpt-4.1 alternatives from Foundry catalog, no provisioning/evals) requires valid GitHub→Azure federation. Butters' findings flagged two fork decisions blocking a full live-eval run past Stage 1. Autonomy: Stage 1 live trigger + provisioning apply remain user-gated.
+
+---
+
+### Kyle: EXECUTE OIDC Identity Re-Establishment (Role: Security/Identity + Governance Lead)
+
+**Dispatch**: 2026-07-23, EXECUTED (real Azure/GitHub mutations, user-approved).
+
+**Request**: "EXECUTE OIDC identity re-establishment + least-privilege RBAC + 9 Group A GitHub variables (user-approved impactful)."
+
+**Outcome**: ✓ EXECUTED
+
+**Real Azure + GitHub Mutations** (all user-approved prior to execution):
+
+**App Registration & Federated Credential**:
+- **New app registration** `mua-github-oidc` in tenant `1d97ac0b-…` (Soham's production tenant)
+  - App ID (clientId): `ea6ff70a-e4fb-48cf-98d9-86dfa3d046db`
+  - App object ID: `39ab090c-5b1b-429c-ba37-b8db69d6c741`
+  - Service Principal object ID: `dba88227-a0ce-4b53-b70d-923f0ec64f4f`
+  - Sign-in audience: AzureADMyOrg (Microsoft work/school accounts in this tenant only)
+- **Federated Credential** `gh-main`:
+  - Subject: `repo:sohamda/model-upgrade-automation:ref:refs/heads/main`
+  - Issuer: `https://token.actions.githubusercontent.com`
+  - Audience: `api://AzureADTokenExchange`
+  - Secretless (no client secret)
+
+**Least-Privilege RBAC on Service Principal** (no change to RG subscription Owner or Contributor):
+- **Cognitive Services Contributor** @ scope ff-hub-01 (Foundry account) — enables SP to deploy models, manage inference endpoints
+- **Cognitive Services User** @ scope ff-hub-01 — enables SP to invoke model inference
+- **Reader** @ scope `/subscriptions/84b82c4c-ae43-4127-8cf6-ecd1c9466830/resourceGroups/ai-resources` — enables SP to read resource metadata, discovery queries (NO Contributor on RG)
+
+**GitHub Variables Set** (Group A, fully applied):
+1. `AZURE_CLIENT_ID` = `ea6ff70a-e4fb-48cf-98d9-86dfa3d046db`
+2. `AZURE_TENANT_ID` = `1d97ac0b-…` (production tenant)
+3. `AZURE_SUBSCRIPTION_ID` = `84b82c4c-ae43-4127-8cf6-ecd1c9466830`
+4. `RESOURCE_GROUP` = `ai-resources`
+5. `FOUNDRY_ACCOUNT_NAME` = `ff-hub-01` (existing Foundry account)
+6. `FOUNDRY_PROJECT_NAME` = `ff-proj-001`
+7. `ALLOWED_REGIONS` = `swedencentral`
+8. `FOUNDRY_PROJECT_ENDPOINT` = `https://ff-hub-01.…` (auto-discovered, set)
+9. `JUDGE_MODEL` = `gpt-4.1`
+
+**Group B variables left stale intentionally** (Storage, Key Vault, Container Apps provisioning not yet approved): `STORAGE_ACCOUNT_NAME`, `KEY_VAULT_NAME`, etc. remain unset.
+
+**Execution Notes**:
+- No workflow triggered; no infrastructure provisioning
+- Two transient CLI hiccups (batch prompt interaction; one gh exit-1 on variable set retry) handled without destructive retries; verified via read-only `gh repo variable list`
+- ✓ Verified app reg exists in live Azure
+- ✓ Verified federated credential bound and retrievable
+- ✓ Verified RBAC roles assigned at correct scopes (no RG Contributor)
+- ✓ Verified 9 Group A variables set in repo
+
+**Consequence**: **Stage 1 live run now UNBLOCKED**. ff-hub-01 currently has `publicNetworkAccess=Enabled`, so GitHub-hosted runner can reach it for discovery + live_catalog fetch.
+
+**Consumption Block**:
+- Model: claude-3-5-sonnet
+- Model Tier: default
+- Input Tokens: 6,000
+- Cached Tokens: 0
+- Output Tokens: 2,600
+- Input Rate: $3.00 per 1M
+- Cached Rate: $0.30 per 1M
+- Output Rate: $15.00 per 1M
+- Est. Cost USD: 0.057
+- Est. Credits: 5.7
+- Basis: tier-default
+
+---
+
+### Butters: PLAN-ONLY Provisioning Package (Role: DevOps + IaC Engineer)
+
+**Dispatch**: 2026-07-23, PLAN-ONLY (no Azure mutation).
+
+**Request**: "PLAN-ONLY provisioning of ACA/Storage/KV for live-eval; verify existing Bicep, add bicepparam, local build, gated apply command."
+
+**Outcome**: ✓ PLAN-ONLY, no mutations
+
+**Findings**:
+
+**Existing Bicep Coverage** — All 4 missing resources already have modules:
+- `infra/modules/container-apps.bicep` → ACA environment with `internal=true` + ACA job with SystemAssigned MI
+- `infra/modules/storage.bicep` → StorageV2 + blob/table private endpoints + private link DNS zones
+- `infra/modules/keyvault.bicep` → RBAC-enabled vault + private endpoints + private link DNS zones
+- `infra/modules/rbac.bicep` → 5 ACA-MI role assignments + GitHub Contributor role on new Foundry
+
+**New Artifact** (working-tree only):
+- `infra/main.bicepparam` — Azure Infrastructure as Code parameters file for instance 003, targeting:
+  - Subscription: `84b82c4c-ae43-4127-8cf6-ecd1c9466830`
+  - Resource Group: `ai-resources`
+  - Region: `swedencentral`
+  - Instance suffix: `003`
+  - Storage account: `stmuadev003`
+  - Key Vault: `kv-mua-dev-003`
+  - ACA environment: `acaenv-mua-dev-003`
+  - **NEW Foundry**: `fnd-mua-dev-003` (note: duplicates ff-hub-01 in same RG)
+  - GitHub SP objectId: `dba88227-…` (the new SP from Kyle's execution)
+
+**Validation**:
+- ✓ Local `az bicep build --file infra/main.bicep --outfile $TEMP/mua-params.json` → **PASS** (exit 0)
+- ⚠ What-if analysis SKIPPED (would hit live Azure; gated behind user approval)
+
+**BLOCKERS** (decision needed before a full live-EVAL run; architecture fork):
+
+**BLOCKER #1 (HIGH): Private-Network vs GitHub-Hosted Runner**
+- ACA environment configured `internal=true` (private, no public IP)
+- Storage, Key Vault, Foundry all configured `publicNetworkAccess=Disabled` + `allowSharedKeyAccess=false`
+- **Consequence**: GitHub-hosted runner (public IP) cannot reach private endpoints
+- **Required path forward**: Self-hosted runner in VNet, Azure Container Apps job executes eval with MI-authenticated access (designed pattern), or jump-box / bastion
+- **Posture**: NOT weakened; private-network architecture is correct; runner reachability is separate decision
+
+**BLOCKER #2 (MEDIUM): Monolith Orchestration vs. Wire to Existing ff-hub-01**
+- `infra/main.bicep` is a monolith → deploying it creates **~43 resources** including:
+  - NEW Foundry account `fnd-mua-dev-003` (duplicates ff-hub-01 in same RG)
+  - NEW VNet `vnet-mua-dev-003`
+  - NEW Container Apps environment
+  - NEW Storage + Key Vault + monitoring
+  - **SUBSCRIPTION-scoped policy definitions** (requires subscription-level `Microsoft.Authorization/policyDefinitions/write` — likely cause of prior DeploymentFailed on old sub)
+- `infra/rbac.bicep` assigns:
+  - `Cognitive Services User` → NEW `fnd-mua-dev-003` (not ff-hub-01)
+  - GitHub variables set to `FOUNDRY_ACCOUNT_NAME=ff-hub-01`
+  - **Consequence**: Mismatch between GitHub vars (ff-hub-01) and deployed Foundry (fnd-mua-dev-003)
+- **Required path forward**: Refactor `infra/main.bicep` to accept optional Foundry scope parameter, wire ACA to **existing** ff-hub-01, skip new Foundry creation (out of PLAN-ONLY scope)
+
+**Gated Deployment Commands** (for when blockers resolved):
+```bash
+# What-if (safe, no mutations)
+az deployment group what-if \
+  --resource-group ai-resources \
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam \
+  --subscription 84b82c4c-ae43-4127-8cf6-ecd1c9466830
+
+# Apply (destructive, requires explicit approval)
+az deployment group create \
+  --resource-group ai-resources \
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam \
+  --subscription 84b82c4c-ae43-4127-8cf6-ecd1c9466830
+```
+
+**Cost Estimate** (rough; before pricing API integration):
+- 4 private endpoints + DNS zones: ~$20–25/mo
+- Storage (blob): ~$1–2/mo (consumed)
+- Key Vault: ~$1–2/mo
+- ACA: $0 (scales to zero when not running)
+- **Total**: ~$30–45/mo (dominated by private endpoints)
+
+**Artifacts Delivered** (working-tree only):
+- `infra/main.bicepparam` — instance 003 parameters, ready for what-if / apply
+- `.copilot-tracking/changes/2026-07-23/butters-provisioning-plan-only-analysis.md` — analysis memo
+
+**Consumption Block**:
+- Model: claude-3-5-sonnet
+- Model Tier: default
+- Input Tokens: 7,000
+- Cached Tokens: 0
+- Output Tokens: 3,600
+- Input Rate: $3.00 per 1M
+- Cached Rate: $0.30 per 1M
+- Output Rate: $15.00 per 1M
+- Est. Cost USD: 0.075
+- Est. Credits: 7.5
+- Basis: tier-default
+
+---
+
+## Decision Summary
+
+**Autonomy for Next Phase**:
+1. **Stage 1 live run** (discover alternatives from Foundry catalog, no provisioning/evals): **User-gated trigger** (OIDC now valid, ff-hub-01 public). Ready when user approves.
+2. **Provisioning apply** (Blocker #1 + #2 resolution): **Requires user approval + architecture decision** (runner path + Foundry scope). Candidate owners: Cartman (architecture/MVP) + Kyle (network/security). Not yet decided.
+
+**Next Decision Makers**: Architecture + Security council (per Decision #13 council protocol) to resolve private-network runner + monolith fork before full live-eval provisioning.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#decision-45-oidc-identity-re-established-executed--provisioning-plan-ready-full-live-eval-run-blocked-by-private-network-architecture-fork-2026-07-23`
   - WI-02 Architecture: Clone detect-and-eval.yml posture (OIDC, SHA-pinned, persist-credentials:false, concurrency control) ✓
   - WI-02 Security: No client-secret, only OIDC/federated auth ✓
   - WI-02 PR Automation: config/quality_safety_benchmarks.yaml only; no .env/.results ✓
@@ -425,6 +635,44 @@ Three bounded gpt-4.1 live scans across the same evaluation context (num-objecti
 **Architectural Significance**: Medium — establishes eval-producer seam for extensible quality/safety scoring; runtime isolation upheld; future Azure Foundry wiring unblocked. Conftest fix is permanent: decision #33 env-pollution regression cannot recur.
 
 **Decision Ref**: `.copilot-tracking/squad/decisions.md#phase-2-landed-offline-real-eval-producer-seam-for-qualitysafety-benchmarks--test-env-isolation-conftest-2026-07-22`
+
+---
+
+## Azure Retail Prices Research for Idle-Cost Baseline — 2026-07-23
+
+**Decision**: Dispatched Researcher Subagent (read-only REST API research role) to query Azure Retail Prices REST API for swedencentral to establish idle-state cost floor. Coordinator classified pure research request (no pricing pattern in routing.md); general research dispatch resolved to Researcher Subagent.
+
+**Topic**: Azure Retail Prices research for swedencentral idle-cost baseline — 8 resource types queried across resource SKUs and regions.
+
+**Outcome**: Retrieved catalog prices for swedencentral.
+
+**Known Idle-State Floor** (no live traffic, baseline minimum): **~$3.84/month** (100 GB Hot LRS Blob Storage ~$1.84 + 4 Private DNS zones ~$2.00). All other consumption meters carry no standing cost at baseline:
+- Key Vault operations: $0.03 per 10K ops (zero at idle)
+- Log Analytics ingestion: $2.99/GB above 5 GB free tier (zero at idle)
+- Container Apps vCPU-sec/GiB-sec: $0 at idle (scales to zero)
+- AI Services S0 (Foundry): per-transaction, $0 at idle
+- Application Insights: ingestion billed via Log Analytics (no direct meter)
+
+**Open Issue / Limitation**: **Private Endpoint (Private Link) meter returned ZERO rows** in swedencentral across 3 filter variants (filtering by resource type, SKU family, and combined). Cost is **unresolved** — must NOT be treated as $0. Blocked on downstream catalog refinement or Azure SKU metadata expansion. Current baseline does NOT include private-endpoint per-month cost.
+
+**Notable Catalog Mismatches vs User Filters**:
+- Blob Storage SKU in catalog: `Hot LRS` (not `Standard_LRS` as specified)
+- AI Services (Foundry Models) found under `Foundry Tools` resource provider (not `Cognitive Services`)
+- Private DNS Zone meter returned region-agnostic (armRegionName blank); pricing uniform across all regions
+
+**Implementation**: 8 bounded REST API queries against `/subscriptions/{sub}/providers/Microsoft.CostManagement/query` endpoint via `az rest --method post` (no SDK added, az-cli native). All queries executed read-only; no mutations, no credentials exposed, no live subscription state changed.
+
+**Consumption Block**:
+- Agent: Researcher Subagent
+- Model Tier: fast (read-heavy research role, cost-first default)
+- Input Tokens: ~4,500 (estimated, tier-default; exact unknown)
+- Cached Tokens: 0
+- Output Tokens: ~1,900 (estimated, tier-default; exact unknown)
+- Basis: tier-default
+
+**Next**: Private-endpoint cost unresolved. Recommend escalation to Azure catalog team or downstream IaC refinement (explicit private-endpoint resource declaration in Bicep) to surface real cost once deployed live.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#azure-retail-prices-research-for-idle-cost-baseline--2026-07-23`
 
 ---
 
@@ -1560,6 +1808,71 @@ This would prevent an exported `DEPLOYMENT_TYPE` from silently breaking `tests/u
 
 ---
 
+## Decision #43: Workflow GH-Variable Verification After Tenant/Subscription Change — OIDC Re-Establishment Is Critical-Path Blocker (2026-07-23)
+
+**Decision**: GitHub Actions workflow (detect-and-eval) GH-variable surface verified READ-ONLY post-tenant/subscription change. Variables remain on OLD environment (tenant `16b3c013…`, sub `3b250d66…`); live az CLI auth is on NEW environment (tenant `1d97ac0b-d548-4256-af90-fdaaac31fbc5`, sub `84b82c4c-ae43-4127-8cf6-ecd1c9466830`). **CRITICAL BLOCKER**: OIDC federated credential bound to OLD-tenant app registration cannot be moved; full live workflow execution requires NEW-tenant app registration with federated credential (subject `repo:sohamda/model-upgrade-automation:ref:refs/heads/main`, issuer https://token.actions.githubusercontent.com, audience api://AzureADTokenExchange) + least-privilege RBAC on new sub/RG. This is a Security/Identity (Kyle) domain impactful action requiring explicit user approval. Dry-run (`dry_run=true`) requires ZERO variable changes.
+
+**Trigger**: User requested verification of workflow GH-variable surface after tenant + subscription changed 2026-07-22. User unavailable; verification dispatched as auto-tier (read-only) task.
+
+**Resolved Role**: DevOps + IaC Engineer (Task Researcher, Butters, auto-tier)
+
+**Scope**: Read-only verification with live `gh` (authed as sohamda) and `az` (authed to new subscription); no repo files or Azure/GitHub resources mutated.
+
+**Repo Context**: `sohamda/model-upgrade-automation`, default branch `main`. Workflows `.github/workflows/detect-and-eval.yml` and `.github/workflows/ci.yml` are secretless OIDC (no secrets.* references).
+
+**Finding Summary**:
+
+### Variables Currently Set (All on OLD Environment)
+
+| Variable | Current Value | Environment | Needed? | Action |
+|---|---|---|---|---|
+| AZURE_TENANT_ID | `16b3c013…` | OLD | YES | Change to `1d97ac0b-d548-4256-af90-fdaaac31fbc5` (NEW) |
+| AZURE_SUBSCRIPTION_ID | `3b250d66…` | OLD | YES | Change to `84b82c4c-ae43-4127-8cf6-ecd1c9466830` (NEW) |
+| RESOURCE_GROUP | (OLD value inferred) | OLD | YES | Change to `ai-resources` |
+| FOUNDRY_ACCOUNT_NAME | (OLD value inferred) | OLD | YES | Change to `ff-hub-01` |
+| FOUNDRY_PROJECT_NAME | (OLD value inferred) | OLD | YES | Change to `ff-proj-001` |
+| ALLOWED_REGIONS | (OLD value inferred) | OLD | YES | Change to `swedencentral` |
+
+### Variables Not Currently Set (Require Provisioning in NEW Sub)
+
+| Variable | Current State | Needed For | Action |
+|---|---|---|---|
+| AZURE_CLIENT_ID | NOT SET | OIDC auth | **CRITICAL**: Create NEW app registration in NEW tenant with federated credential |
+| ACA_ENVIRONMENT_NAME | NOT SET | ACA provisioning | Determine from new sub |
+| ACA_JOB_NAME | NOT SET | ACA job execution | Determine from new sub |
+| STORAGE_ACCOUNT_NAME | NOT SET | Artifact staging | Determine from new sub |
+| KEY_VAULT_NAME | NOT SET | Secret management | Determine from new sub |
+| FOUNDRY_PROJECT_ENDPOINT | NOT SET | Quality/Safety eval (live only) | Determine from new Foundry project |
+| JUDGE_MODEL | NOT SET | Judge LLM selection (live only) | User choice (e.g., gpt-4.1) |
+
+**CRITICAL BLOCKER: OIDC Re-Establishment Required**
+
+The current AZURE_CLIENT_ID is an app registration + federated credential in the OLD tenant. A federated credential **cannot be moved** between tenants. To execute full live workflows (non-dry-run) on the NEW tenant, a new app registration is required in the NEW tenant with:
+
+- **Federated Credential Subject**: `repo:sohamda/model-upgrade-automation:ref:refs/heads/main`
+- **Issuer**: `https://token.actions.githubusercontent.com`
+- **Audience**: `api://AzureADTokenExchange`
+- **Least-Privilege RBAC**: Scoped to new subscription (`84b82c4c…`) resource group (`ai-resources`) with minimal required roles (Contributor or custom role for ACA, Foundry, storage, KV operations)
+
+**This is a Security/Identity action (Kyle domain) and is an Impactful Action requiring explicit user approval — NOT auto-performed.**
+
+**Dry-Run Impact**: The dry-run path (`dry_run=true`) gates OIDC usage behind a non-dry-run conditional; it does not validate credentials and therefore requires ZERO variable changes. Dry runs can proceed immediately.
+
+**Bottom Line**:
+
+- **Group A (Direct Updates, Optional for Dry-Run, Required for Live)**: AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, RESOURCE_GROUP, FOUNDRY_ACCOUNT_NAME, FOUNDRY_PROJECT_NAME, ALLOWED_REGIONS
+- **Group B (Provisioning Required for Live)**: AZURE_CLIENT_ID (NEW app reg + federated cred), ACA_ENVIRONMENT_NAME, ACA_JOB_NAME, STORAGE_ACCOUNT_NAME, KEY_VAULT_NAME, FOUNDRY_PROJECT_ENDPOINT, JUDGE_MODEL
+- **Dry-Run Path**: Executable immediately with Group A values only (no Group B needed)
+- **Live Path**: Requires Group A + Group B + OIDC re-establishment (user-gated, Security lead responsibility)
+
+**Autonomy Tier**: Verification was read-only (auto-tier); remediation (setting variables, creating app reg/RBAC) remains user-gated. Classification: IMPACTFUL ACTION — explicit user approval required before any variable edits or app reg creation.
+
+**Status**: ✓ Verification complete; escalation prepared; awaiting user decision on dry-run vs. live path and approval for OIDC re-establishment.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#decision-43-workflow-gh-variable-verification-after-tenantsubscription-change--oidc-re-establishment-is-critical-path-blocker-2026-07-23`
+
+---
+
 ## gpt-4.1 Retirement Alternatives Analysis (2026-07-17T20:30:00Z)
 
 **Decision**: Dispatch Task Researcher to analyze repo capabilities for discovering model alternatives when gpt-4.1 retires.
@@ -1984,3 +2297,167 @@ This would prevent an exported `DEPLOYMENT_TYPE` from silently breaking `tests/u
 16. **New SDK Constraint**: Any new inference SDK for live provider goes ONLY into [evaluation] optional extra, lazy-imported, gated under --live, with construction-only (no-network) test.
 
 **Decision Ref**: `.copilot-tracking/squad/decisions.md#council-verdict-2026-07-22-wi-03-quality-safety-harness-dataset`
+
+---
+
+## Full Live-Run Prep — OIDC Re-Establishment Runbook + Group B Resources MISSING; Staged Escalation Recommended (2026-07-23)
+
+**Decision #44**: Staged escalation framework established for full live detect-and-eval run. Group B infrastructure missing (ACA, Storage, Key Vault); new-tenant OIDC identity gap identified; least-privilege RBAC + federated credential runbook generated; private-network contract violation flagged on ff-hub-01.
+
+**Trigger**: User requested full live run of detect-and-eval. Kyle (Security/Identity + Governance) performed read-only discovery + generated commands-only runbook with NO create/set/assign/delete/trigger mutations.
+
+**Discovery Summary (new subscription 84b82c4c…, RG ai-resources, tenant 1d97ac0b…)**:
+
+**Group A (Present — Environment Ready)**:
+- **Foundry Hub**: ff-hub-01 (AIServices, swedencentral)
+- **Foundry Project**: ff-proj-001 with endpoint https://ff-hub-01.services.ai.azure.com/api/projects/ff-proj-001
+- **Deployments on ff-hub-01**: gpt-4.1 (2025-04-14, in-service) and gpt-5.6-sol (2026-07-09, in-service) — **recommend JUDGE_MODEL=gpt-4.1**
+- **Detected Environment Variables**:
+  - FOUNDRY_HUB_NAME=ff-hub-01
+  - FOUNDRY_PROJECT_NAME=ff-proj-001
+  - FOUNDRY_ENDPOINT=https://ff-hub-01.services.ai.azure.com/api/projects/ff-proj-001
+  - JUDGE_MODEL=gpt-4.1
+  - SUBSCRIPTION_ID=84b82c4c…
+  - RESOURCE_GROUP=ai-resources
+  - TENANT_ID=1d97ac0b…
+
+**Group B (MISSING — Provision-First Blocker)**:
+- **ACA_ENVIRONMENT_NAME**: 0 instances in RG/subscription
+- **ACA_JOB_NAME**: 0 instances in RG/subscription
+- **STORAGE_ACCOUNT_NAME**: 0 instances in RG/subscription
+- **KEY_VAULT_NAME**: 0 instances in RG/subscription
+
+**Identity & RBAC Assessment**:
+- **New-Tenant OIDC Gap**: No repo-specific app registration or federated credential exists in tenant 1d97ac0b…. Two generic apps detected (github-personal, github-wf) with no active FICs.
+- **Recommended New App**: `mua-github-oidc` with single federated credential subject `repo:sohamda/model-upgrade-automation:ref:refs/heads/main` (sufficient — all Azure-auth jobs run from main on schedule/workflow_dispatch).
+- **Least-Privilege RBAC Recommendation** (tighter than TG3 contract "Contributor on RG"):
+  - **Cognitive Services Contributor** @ ff-hub-01 scope (create/delete/list deployments; covers sweeper delete)
+  - **Cognitive Services User** @ ff-hub-01 scope (data-plane judge/red-team inference; narrower alt: Cognitive Services OpenAI User)
+  - **Reader** @ ai-resources RG scope (sweep-orphans resource enumeration)
+  - Future tighter alternative: custom "MUA Ephemeral Janitor" role (not created yet; deferred to post-live-run hardening)
+
+**Staged Live-Run Escalation** (cost-aware stages with gating):
+
+1. **Stage 0: Dry-run mode** (`dry_run=true`, free) — Validate OIDC login, detector/recommender pipeline, no Azure resources created or modified. **Cost: $0**.
+2. **Stage 1: Live discovery + live_catalog** (read-only, no provisioning/evals, free) — Authenticate with OIDC, discover live Foundry endpoints, fetch live model catalog. Validates OIDC login path. **Cost: $0**.
+3. **Stage 2: Provision candidates** (`provision_candidates=true`, REAL COST) — Create Foundry deployments for top-k candidates. Uses Group A judge model (gpt-4.1, existing) as evaluator. Creates instances under ff-hub-01. **Estimated cost: $50–150 depending on model SKU + deployment hours**.
+4. **Stage 3: Run evals** (`run_evals=true`, BLOCKED until ACA provisioned) — Execute evaluations. `src/evaluator/aca_job.py` raises `PreconditionError` until ACA_ENVIRONMENT_NAME + ACA_JOB_NAME are provisioned (Stage 2 prerequisite). **Estimated cost: $100–300 depending on evaluation probe count + model response tokens**.
+
+**Security Flags for Production Run** (raise with user):
+1. **ff-hub-01 publicNetworkAccess=Enabled VIOLATES private-only contract** (expected: Disabled). Current state allows public internet access to Foundry hub. User acknowledgment required before Stage 2 provisioning.
+2. **Storage / KV / ACA absent** means private-endpoint + governance posture unverified. Recommend provisioning in same RG with private-endpoint wiring before production eval.
+3. **Prefer three scoped roles** (Contributor, User, Reader) over Contributor-on-RG for least-privilege compliance.
+
+**Runbook Artifact Generated** (commands only, no execution):
+- `.copilot-tracking/squad/live-run-prep-oidc-runbook.md` — Step-by-step commands for app registration, FIC creation, RBAC assignment, GitHub variable set, workflow trigger. User must approve and execute each command.
+
+**Autonomy & Gates**: All remediation (create app/SP/FIC, RBAC assignment, gh variable set, workflow trigger, provisioning) remains **user-gated / Impactful-Action Gate**. Kyle performed read-only discovery only; nothing executed, nothing committed.
+
+**Architectural Significance**: Medium — Live run readiness framework established. Identified infrastructure gaps (Group B) and identity misalignment (OIDC). Staged escalation enables cost-aware progression and clear rollback points. Private-network contract violation flagged as pre-Stage-2 blocker.
+
+---
+
+## Council Verdict 2026-07-23 infra-provisioning-live-run
+
+**Topic**: Provision infra/main.bicep resources (instance 003) and execute full live detect-and-eval pipeline
+
+**Proposal Ref**: Butters' provisioning-plan-only analysis + Kyle's OIDC re-establishment + cost-manager staged escalation
+
+**Council Members Dispatched**:
+- Cartman (System Architecture Reviewer / MVP Product/Tech Integrator)
+- Kyle (Security Planner / Security/Identity + Governance Lead)
+- cost-manager (Squad Cost Manager)
+
+**Dispatch Timestamps**: 2026-07-23T08:00:00Z
+
+**Verdict**: **Go-With-Conditions** (most-restrictive-wins aggregation)
+
+**Risk Assessment**: Medium (across all three council members)
+
+### Findings by Role
+
+| Role | Verdict | Risk | Key Findings |
+|---|---|---|---|
+| System Architecture Reviewer (Cartman) | Go-With-Conditions | Medium | Monolith Bicep design has architectural merit but current fork decision (new Foundry vs. existing ff-hub-01 wiring) must be resolved before apply. Private-network runner reachability is a separate architecture fork. Architecture seam itself is sound. |
+| Security Planner (Kyle) | Go-With-Conditions | Medium | OIDC identity re-established with least-privilege RBAC (Contributor @ ff-hub-01, User @ ff-hub-01, Reader @ RG). ff-hub-01 publicNetworkAccess=Enabled violates private-only design contract—user acknowledgment required. Provisioning audit + post-deploy scan recommended. |
+| Cost Manager (Squad Cost Manager) | Go-With-Conditions | Medium | Staged escalation framework cost-aware: Stage 0–1 free (dry-run + discovery), Stage 2–3 real cost ($50–450 estimated). Private-endpoint stack adds ~$30–45/mo. Cost ceiling monitoring recommended before Stage 2. |
+
+### Synthesis
+
+**Architecture Perspective** (Cartman):
+- Bicep monolith (43 resources, subscription-scope policies) is well-structured and comprehensive
+- **BLOCKER #1 (Architecture Decision Required)**: Monolith creates NEW Foundry `fnd-mua-dev-003` but GitHub variables point to EXISTING `ff-hub-01`. Either:
+  - **Option A (Recommended)**: Refactor main.bicep to accept optional `foundry_scope` parameter, wire ACA to EXISTING `ff-hub-01`, skip new Foundry (reduces 43→~30 resources, avoids duplication, aligns with variables)
+  - **Option B (Current State)**: Deploy new `fnd-mua-dev-003`, update GitHub variables to match, accept resource duplication
+  - Decision required before `az deployment group create` (deploy apply)
+- **BLOCKER #2 (Architecture Decision Required)**: Private-network design (`internal=true` ACA, `publicNetworkAccess=Disabled` all resources) blocks GitHub-hosted runner. Requires either:
+  - Self-hosted runner in VNet (preferred, aligns with private-network design)
+  - ACA job with MI executes eval (asynchronous, not real-time feedback)
+  - Bastion/jump-box tunnel (operational complexity)
+  - Decision required before Stage 2 provisioning applies
+- **No Structural Risk**: Both architecture forks are valid; decision is organizational (design intent clarity, not API alignment)
+
+**Security Perspective** (Kyle):
+- OIDC re-establishment EXECUTED ✓; new app `mua-github-oidc` in NEW tenant with federated credential subject `repo:sohamda/model-upgrade-automation:ref:refs/heads/main` (valid, all jobs run from main)
+- Least-privilege RBAC assigned: Cognitive Services Contributor @ ff-hub-01, Cognitive Services User @ ff-hub-01, Reader @ ai-resources RG (tighter than Contributor-on-RG contract)
+- **ALERT**: ff-hub-01 publicNetworkAccess=Enabled VIOLATES implicit private-network design contract (expected: Disabled). Public internet can reach Foundry hub. **User acknowledgment required** before Stage 2 provisioning
+- Private-endpoint stack (Storage, KV, ACA private endpoints + DNS zones) not yet verified for connectivity; recommend post-deploy test
+- Provisioning audit (tagging, soft-delete, access reviews) recommended before eval runs
+- Post-deployment security scan recommended (NSG rules, firewall rules, private-link DNS integration validation)
+
+**Cost Perspective** (Cost Manager):
+- Staged escalation framework COST-AWARE:
+  - **Stage 0 (dry-run)**: $0 (fixture data, no Azure calls)
+  - **Stage 1 (live discovery + live_catalog)**: $0 (read-only Foundry hub access, no deployments)
+  - **Stage 2 (provision candidates)**: $50–150 (Foundry model deployments, depends on SKU + hours active; sweeper deletion reduces cost)
+  - **Stage 3 (run evals)**: $100–300 (quality + red-team evaluation tokens, depends on probe count + model)
+  - **Baseline idle**: ~$30–45/mo (private-endpoints, storage baseline, KV operations)
+- **Cost Ceiling Monitoring**: Recommend setting Azure budget alert at $200 before Stage 2 apply (hard ceiling enforcement)
+- **Regional Consideration**: swedencentral pricing ~5–10% lower than other EU regions; good choice for cost optimization
+- **Resource Cleanup**: Sweeper workflow (sweep-orphans) + manual cleanup tagged resources critical to prevent runaway costs if eval loop repeats
+
+### Implementation Gate
+
+**Go**:
+- OIDC re-established (NEW tenant, NEW federated credential, least-privilege RBAC set)
+- `az deployment group what-if` (safe, shows resource changes, no mutations)
+- Provisioning plan artifact (`infra/main.bicepparam`, ready for what-if/apply)
+
+**Stop-and-Gate**:
+1. **Architecture Decision**: Monolith fork (Option A vs Option B) — must resolve before `az deployment group create`
+2. **Private-Network Decision**: Runner reachability (self-hosted vs. ACA job vs. bastion) — must resolve before full Stage 2 provisioning
+3. **User Acknowledgment**: ff-hub-01 publicNetworkAccess=Enabled security posture — must acknowledge before apply
+4. **Cost Ceiling Set**: Budget alert configured before Stage 2 apply
+
+**Conditional Gating**:
+- What-if analysis (Stage 0.5): Safe, read-only, shows resource changes — can proceed once architect decisions resolved
+- Apply provisioning (Stage 2): Requires ALL four gates closed + explicit user approval
+
+### Binding Conditions (Consolidated Most-Restrictive-Wins)
+
+1. **Architecture Decision #1 (Monolith Fork)**: Resolve Foundry scope before apply — either refactor to wire existing ff-hub-01 (Option A, preferred) or accept new fnd-mua-dev-003 + update variables (Option B). Document rationale in ADR or decision entry.
+2. **Architecture Decision #2 (Private-Network Runner)**: Resolve runner reachability before Stage 2 — self-hosted in VNet (preferred), ACA job with MI (async), or bastion (operational). Document decision and implementation plan.
+3. **OIDC Verification**: Confirm new app registration `mua-github-oidc` exists in new tenant, federated credential is bound, and GitHub AZURE_CLIENT_ID variable is set to correct clientId.
+4. **Security Acknowledgment**: User acknowledges ff-hub-01 publicNetworkAccess=Enabled violates private-only design intent. Recommend disabling after eval validation.
+5. **Cost Ceiling**: Set Azure budget alert at $200 threshold before Stage 2 provisioning apply. Monitor daily during Stages 2–3.
+6. **Staging Discipline**: Execute in order (Stage 0 → 1 → 2 → 3); do not skip stages. Rollback defined for each stage (destroy vs. release vs. redeploy).
+7. **Post-Deploy Verification**: Smoke tests required post-provisioning (connectivity test for private endpoints, NSG validation, sweeper workflow health check).
+8. **Resource Tagging**: All new resources tagged with `Squad=mua-dev-003`, `CreatedBy=terraform/bicep`, `CostCenter=dev`, `Cleanup=auto` (sweeper cleanup logic tied to tags).
+9. **Cleanup Automation**: Sweeper workflow enabled and tested before Stage 3; hard stop if sweeper unhealthy (prevent orphan accumulation).
+10. **Least-Privilege Enforcement**: SP remains scoped to minimal roles (Contributor @ ff-hub-01, User @ ff-hub-01, Reader @ RG); NO Contributor-on-RG. Custom role preferred if tighter than built-in.
+
+### Decision Summary
+
+**Staged Live Run Framework Approved** (Go-With-Conditions):
+- Stage 0–1 (free, read-only): Ready to execute immediately
+- Stage 2 (provisioning, $50–150): Blocked on architecture decisions #1 & #2 + cost ceiling set
+- Stage 3 (evals, $100–300): Blocked on Stage 2 completion + cost ceiling validation
+
+**Escalation Owners**:
+- Cartman (MVP/Architecture): Resolve monolith fork + runner reachability
+- Kyle (Security/Identity): Post-deploy audit + publicNetworkAccess acknowledgment
+- Cost Manager (Squad): Budget alert + cost monitoring during Stages 2–3
+
+**Next Decision Gate**: Architecture decisions resolved → what-if analysis → user approval for apply → staged execution with cost/security checkpoints
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#council-verdict-2026-07-23-infra-provisioning-live-run`

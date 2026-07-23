@@ -56,8 +56,13 @@ class DetectorServiceTests(unittest.TestCase):
         )
 
         # Assert
-        self.assertEqual(len(result.parse_warnings), 1)
-        self.assertEqual(result.parse_warnings[0].code, "unwatched_retirement_signal")
+        self.assertEqual(len(result.parse_warnings), 2)
+        self.assertTrue(
+            all(
+                warning.code == "unwatched_retirement_signal"
+                for warning in result.parse_warnings
+            )
+        )
 
 
 if __name__ == "__main__":
