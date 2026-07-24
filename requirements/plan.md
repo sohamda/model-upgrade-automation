@@ -11,21 +11,21 @@
 
 | # | Decision | Choice |
 |---|---|---|
-| 1 | Architecture | **B — GHA orchestrator + Azure-native eval compute** |
+| 1 | Architecture | **⚠ Superseded by [ADR-0001](../docs/adrs/0001-adopt-architecture-c-single-container-cron.md).** ~~B — GHA orchestrator + Azure-native eval compute~~ |
 | 2 | Trigger | Weekly cron (Mondays 04:00 UTC, configurable) + `workflow_dispatch` |
 | 3 | Model discovery source | **Both**: user-supplied `config/models.yaml` + optional live introspection of a subscription's Foundry/OpenAI deployments |
 | 4 | Retirement horizon | 90 days by default; configurable per model |
 | 5 | Persistent infra (pre-provisioned once) | Resource Group, Foundry hub/project (with private endpoint), Storage Account, Key Vault, Container Apps Environment (VNet-integrated), App Insights, VNet + subnets, Private DNS zone |
 | 6 | Ephemeral infra (created per run, torn down after) | Model deployments for candidates, evaluation Container Apps job invocations |
-| 7 | Alternative recommender | Rule-based scoring (deterministic, free, MVP). Optional LLM-agent upgrade in v1.0 |
+| 7 | Alternative recommender | **⚠ Superseded by [ADR-0003](../docs/adrs/0003-facts-based-candidate-shortlisting.md).** Rule-based scoring (deterministic, free, MVP). Optional LLM-agent upgrade in v1.0 |
 | 8 | Number of candidates evaluated | Top 2–3 per retiring model (configurable) |
 | 9 | Deployment types tested | Data Zone Standard by default (configurable to Global/Regional/PTU) |
 | 10 | Custom evals | JSONL golden dataset(s) in `datasets/`, format compatible with `azure-ai-evaluation` |
 | 11 | Red team | `azure-ai-evaluation` Red Team SDK, same attack categories as source repo |
-| 12 | History storage | **Hybrid**: Blob (raw JSON artifacts) + Table Storage (skip-index) + App Insights (score telemetry) |
+| 12 | History storage | **⚠ Superseded by [ADR-0005](../docs/adrs/0005-blob-only-history.md).** ~~**Hybrid**: Blob (raw JSON artifacts) + Table Storage (skip-index) + App Insights (score telemetry)~~ |
 | 13 | Skip-key composite | `(model_id, version, dataset_sha256)`. Optional TTL for forced re-eval |
-| 14 | Network model | **Nothing public.** Foundry, storage, KV all behind private endpoints. ACA job is VNet-integrated and reaches Foundry via private DNS. GHA orchestrator only uses public **control plane** (ARM) — never data plane. |
-| 15 | Report delivery | GitHub Issue (summary) + PR to `docs/reports/YYYY-MM-DD-<model>.md`. Teams webhook opt-in. |
+| 14 | Network model | **⚠ Superseded by [ADR-0002](../docs/adrs/0002-evaluate-on-firewalled-public-eval-foundry.md).** ~~**Nothing public.** Foundry, storage, KV all behind private endpoints. ACA job is VNet-integrated and reaches Foundry via private DNS. GHA orchestrator only uses public **control plane** (ARM) — never data plane.~~ |
+| 15 | Report delivery | **⚠ Superseded by [ADR-0006](../docs/adrs/0006-trim-mvp-scope-and-remove-platform-scaffolding.md).** ~~GitHub Issue (summary) + PR to `docs/reports/YYYY-MM-DD-<model>.md`. Teams webhook opt-in.~~ |
 | 16 | Auto-remediation | Opt-in via `enable_auto_pr` config flag. Off by default — report only. Patches Bicep only; APIM/routing changes are out of scope for the tool. |
 | 17 | Auth | **OIDC federated identity** GH → Azure. Zero long-lived secrets in the repo. |
 | 18 | Template distribution | GitHub template repo. Consumers fork, edit `config/`, wire OIDC, and run. |
