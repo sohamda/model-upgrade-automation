@@ -48,20 +48,48 @@ Estimated cost per dispatched role. All figures are **estimated, not billed**.
 | Security/Identity + Governance Lead (OIDC Re-Establishment + RBAC) | claude-3-5-sonnet | default | 6,000 | 0 | 2,600 | $0.057 | 5.7 |
 | DevOps + IaC Engineer (Provisioning Plan-Only Analysis) | claude-3-5-sonnet | default | 7,000 | 0 | 3,600 | $0.075 | 7.5 |
 | Researcher Subagent (Azure Retail Prices swedencentral) | claude-3-haiku | tier-1/fast | 4,500 | 0 | 1,900 | $0.0112 | 1.12 |
-| **Run Total** | | | **411,400** | **0** | **198,150** | **$3.02790** | **322.740** |
+| Security/Identity + Governance Lead (OIDC FIC Fix for Decision #47) | tier-default | tier-1 | 3,000 | 0 | 1,000 | $0.0064 | 0.64 |
+| Squad Cost Manager: Paid Live-Provision Cost Estimate (2026-07-23) | unknown | tier-1 | 1,500 | 0 | 1,300 | $0.00642 | 0.642 |
+| Task Implementor: Local Evaluation (2026-07-23) | unknown | tier-1 | 4,500 | 0 | 1,600 | $0.0100 | 1.0 |
+| System Architecture Reviewer (Council live-backed-eval-runners) | unknown | tier-1 | 2,500 | 0 | 1,500 | $0.008 | 0.8 |
+| Security Planner (Council live-backed-eval-runners) | unknown | tier-1 | 2,500 | 0 | 1,500 | $0.008 | 0.8 |
+| RAI Planner (Council live-backed-eval-runners) | unknown | tier-1 | 2,500 | 0 | 1,500 | $0.008 | 0.8 |
+| Task Planner: Live-Backed + Promotion-Grade Plan (Decision #52, 2026-07-23) | claude-3-5-sonnet | default | 5,000 | 0 | 2,200 | $0.048 | 4.8 |
+| Task Implementor: Live-Backed + Promotion-Grade Implementation (2026-07-23) | unknown | default | 14,000 | 0 | 6,000 | $0.132 | 13.2 |
+| Task Reviewer: Real Quality-Safety Gates Plan Review (2026-07-23) | unknown | tier-1 | 9,000 | 0 | 3,500 | $0.0212 | 2.12 |
+| Task Implementor: Review Findings F1/F2/F3 Remediation (2026-07-24) | unknown | default | 9,000 | 0 | 3,500 | $0.07950 | 7.95 |
+| Task Implementor: Gated Live Validation Pre-Flight (2026-07-24) | unknown | default | 2,500 | 0 | 800 | $0.00945 | 0.945 |
+| Task Implementor: Gated Live Validation Run — Option A Execution (2026-07-24) | unknown | default | 7,500 | 0 | 2,500 | $0.06000 | 6.00 |
+| Task Implementor: Gated Live Validation Teardown + Report (2026-07-24) | unknown | default | 7,000 | 0 | 2,200 | $0.04530 | 4.53 |
+
+---
+
+## Run Totals
+
+**Estimated Squad Run Cost**: $3.75120 USD ≈ 395.070 credits (estimated, not billed)
+
+**Dispatch Count**: 100
+
+**Model-Tier Composition**:
+- Default tier (claude-3-5-sonnet): 41 dispatches (~$3.19 estimated)
+- Tier-1 (claude-3-haiku): 47 dispatches (~$0.352 estimated)
+- Tier-default (gpt-4o-mini/o1-mini/unknown): 12 dispatches (~$0.199 estimated)
+
+**Cost Comparison Baseline** (manual single-model iteration):
+Assumed 1-hour interactive session (1 human + 1 tier-1 agent): 30 min ramp + 30 min work = ~150k input + 50k output = (~$0.12 + $0.20) = **$0.32**. Squad distributed execution across 100 dispatches with specialized roles: **$3.75120 / $0.32 ≈ 11.7× baseline cost** (reflects broader context breadth, parallel dispatch, specialized expertise deployment, and live validation runs — acceptable for complex infrastructure orchestration and gate implementation task).
+
+**Notes**: All figures are estimated cost projections for planning purposes only. Actual Azure usage billing and Anthropic invoice amounts are the source of truth. Rates verified against live pricing as of 2026-07-20.
+
+| **Run Total** | | | **471,400** | **0** | **223,550** | **$3.75120** | **395.070** |
 
 ## Cost Comparison
 
-**Squad dispatch total**: $2.85814 → 305.764 credits (after gpt-4.1 retirement fixture and detector alignment: +$0.0666 from Python Delivery Lead; cumulative through all 43 decisions and 80 total dispatches; latest: Butters GH-variable verification $0.0156)
+**Squad dispatch total**: $3.75120 → 395.070 credits (after gpt-4.1 retirement fixture and detector alignment, Council verdict evaluations, autonomous-loop completions WI-01/WI-02/WI-03, live-backed eval gates implementation both phases [Task Implementor 232/232 tests], Task Reviewer independent validation [1 HIGH measurement false-safe + 3 Medium], Task Implementor review-findings remediation F1/F2/F3 [239/239 tests], and Task Implementor gated live validation runs [3 dispatches: pre-flight, Option A execution, teardown+report]: cumulative through all 56 decisions and 100 total dispatches; latest: Task Implementor gated live validation teardown + report $0.04530 [default 7k input + 2.2k output])
 
 **Baseline single-model iteration** (1-hour interactive, 1 human + 1 tier-1 agent): ~$0.32 (32 credits)
 
-**Squad efficiency vs. baseline**: 849% of baseline cost (estimated, not billed) — 74 dispatches, 6 roster roles + 11 specialized subagents executing TG1–TG9 phases plus live-mode core-pipeline transition, official-source activation, API audit, ARM Models + Retail Prices integration, quality/safety scoring design research, Phase 1 quality/safety enrichment implementation, ARM catalog chat-capability gate + merged-capabilities fix, Decision #33 environment-pollution correction, Phase 2 offline real-eval producer seam + conftest env-isolation, Council Verdict (Architecture + Security + RAI assessment), WI-01/WI-02 autonomous-loop completion (live FoundryQualitySafetyEvalClient + enrichment wiring + CI refresh workflow), and WI-03 autonomous-loop completion (quality/safety harness + golden dataset + cycle-1 re-validation convergence)
+**Squad efficiency vs. baseline**: 1172% of baseline cost (estimated, not billed) — 100 dispatches, 6 roster roles + 11 specialized subagents executing TG1–TG9 phases plus live-mode core-pipeline transition, official-source activation, API audit, ARM Models + Retail Prices integration, quality/safety scoring design research, Phase 1 quality/safety enrichment implementation, ARM catalog chat-capability gate + merged-capabilities fix, Decision #33 environment-pollution correction, Phase 2 offline real-eval producer seam + conftest env-isolation, Council Verdict (Architecture + Security + RAI assessment), WI-01/WI-02 autonomous-loop completion (live FoundryQualitySafetyEvalClient + enrichment wiring + CI refresh workflow), WI-03 autonomous-loop completion (quality/safety harness + golden dataset + cycle-1 re-validation convergence), live-backed + promotion-grade eval gates implementation (both phases, 232/232 offline validation green), Task Reviewer independent adversarial validation (CHANGES-REQUIRED with 1 HIGH false-safe measurement caveat + 3 Medium operational degradation paths; all 13 Council conditions verified PASS), Task Implementor remediation of F1/F2/F3 findings (category-gated content safety, classifier-availability flagging, runtime canary wiring; 239/239 offline tests green), and Task Implementor gated live validation execution (3 dispatches: pre-flight judge/cost/OIDC verification, Option A end-to-end live gpt-5.1+o3 eval with ephemeral o4-mini judge, teardown+audit report; two real infra bugs surfaced [LIVE-BUG-01 reasoning-judge max_tokens 400, LIVE-BUG-02 red-team model→deployment routing 404]; honest-failure path validated, spend << $20)
 
 ---
 
 **Note**: All token counts and cost estimates are for planning purposes only. Actual costs depend on live API billing. Cached token rates apply only when the SDK returns non-zero `cache_read_input_tokens`.
-
-
-
-

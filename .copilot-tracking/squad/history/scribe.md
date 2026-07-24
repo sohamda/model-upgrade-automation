@@ -1,5 +1,8 @@
 # Scribe History
 
+## Coordinator Cleanup Action (2026-07-24)
+Coordinator torn down ephemeral candidate deployments (gpt-5.1, o3) from ff-hub-01 via `az cognitiveservices account deployment delete` (both exit 0); verified clean state. No LLM role, no consumption block.
+
 ## Decision #30 Recorded: Adopt Cached-Benchmark Design for Quality/Safety Scoring (2026-07-20T11:40:00Z)
 
 **Operation**: Record decision #30 + research dispatch history + consumption + state increment

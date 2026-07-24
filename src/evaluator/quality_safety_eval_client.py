@@ -208,6 +208,14 @@ class FoundryQualitySafetyEvalClient:
     min_samples: int = DEFAULT_MIN_SAMPLES
     probe_prompts: tuple[str, ...] | None = None
     response_provider: Callable[[str, str], str | None] | None = None
+    # The candidate's owned Azure OpenAI DEPLOYMENT name (LIVE-BUG-02). The
+    # red-team scan target must reference an actual deployment, not the abstract
+    # model id, or PyRIT's chat-completion probe 404s (DeploymentNotFound). The
+    # quality/content-safety paths already resolve the deployment via the
+    # injected response_provider closure; the red-team path has no closure, so
+    # it reads this field directly (see _run_red_team). ``None`` preserves the
+    # legacy behavior of falling back to ``model_id`` for hermetic/stub tests.
+    candidate_deployment_name: str | None = None
     credential: object | None = None
     inference_api_version: str = DEFAULT_INFERENCE_API_VERSION
 
@@ -301,6 +309,20 @@ class FoundryQualitySafetyEvalClient:
         judge deployment and the inference API version are what the
         Coherence/Relevance/Fluency evaluators require; the config never carries
         a credential, key or token.
+
+        LIVE-BUG-01 (honest limitation): the azure-ai-evaluation quality
+        evaluators (Coherence/Relevance/Fluency) drive their judge through a
+        packaged prompty whose request body hardcodes ``max_tokens`` and a
+        ``temperature`` -- neither is exposed through this model_config dict, so
+        we CANNOT influence them from here. An o-series *reasoning* judge would
+        therefore 400 on that prompty path regardless of any flag we set. This
+        is NOT patched in the SDK. It is sidestepped by pinning a STANDARD chat
+        judge (gpt-4.1, config/models.yaml::default_judge), which accepts
+        ``max_tokens``/``temperature`` normally. Our own candidate/judge calls
+        that go through ``src/evaluator/aoai_client.py`` ARE fully fixed via the
+        authoritative ``is_reasoning_model`` capability flag (max_completion_tokens,
+        no temperature/system role); only the SDK-internal prompty path remains
+        constrained to standard judges.
         """
 
         return {
@@ -497,9 +519,15 @@ class FoundryQualitySafetyEvalClient:
         # The scan target must be an Azure OpenAI model-config dict (account
         # host + deployment), not a bare string; the SDK reads ``target[...]``
         # and mints its own AAD token from the RedTeam credential above.
+        # LIVE-BUG-02: ``azure_deployment`` MUST be the candidate's owned
+        # DEPLOYMENT name, not the abstract ``model_id`` -- PyRIT issues real
+        # chat-completion calls against this deployment and a model id that is
+        # not also a deployment name 404s (DeploymentNotFound). We prefer the
+        # explicitly-threaded ``candidate_deployment_name`` and only fall back
+        # to ``model_id`` when it is unset (hermetic/stub callers).
         scan_target = {
             "azure_endpoint": self._aoai_endpoint(),
-            "azure_deployment": model_id,
+            "azure_deployment": self.candidate_deployment_name or model_id,
         }
         result = asyncio.run(
             red_team.scan(

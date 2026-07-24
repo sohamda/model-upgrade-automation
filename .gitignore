@@ -15,6 +15,10 @@ __pycache__/
 # Ephemeral run outputs
 results/
 artifacts/
+# Explicit: red-team raw transcripts must never leave the workspace (already
+# covered by the results/ ignore above; path called out for audit-trail
+# clarity per Council conditions C6/C7).
+results/redteam/
 
 # Committed hermetic test fixtures (must survive the results/ and artifacts/ ignores above)
 !tests/fixtures/

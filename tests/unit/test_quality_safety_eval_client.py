@@ -679,6 +679,76 @@ class RunRedTeamTargetTests(unittest.TestCase):
         self.assertTrue(captured["skip_upload"])
 
 
+class RunRedTeamDeploymentTargetTests(unittest.TestCase):
+    """LIVE-BUG-02: the red-team scan must target the owned DEPLOYMENT name,
+    not the model id, or the RedTeam SDK 404s (DeploymentNotFound)."""
+
+    def _fake_sdk(self, captured: dict[str, object]) -> SimpleNamespace:
+        class _FakeResult:
+            def to_scorecard(self) -> dict[str, object]:
+                return {"overall_asr": 10.0, "risk_category_summary": {}}
+
+        class _FakeRedTeam:
+            async def scan(
+                self, *, target: object, attack_strategies: object, skip_upload: bool
+            ) -> _FakeResult:
+                captured["target"] = target
+                return _FakeResult()
+
+        return SimpleNamespace(
+            attack_strategy=SimpleNamespace(Baseline="B", Jailbreak="J"),
+            red_team=lambda **kwargs: _FakeRedTeam(),
+        )
+
+    def test_given_candidate_deployment_when_scanning_then_targets_deployment_name(
+        self,
+    ) -> None:
+        captured: dict[str, object] = {}
+        with _allow_azure_import():
+            client = FoundryQualitySafetyEvalClient(
+                azure_ai_project="https://owned.example/api/projects/p",
+                judge_model="judge-1",
+                probe_prompts=("p1",),
+                response_provider=lambda model_id, prompt: "resp",  # type: ignore[arg-type]
+                candidate_deployment_name="tg4-sol-gpt-5-1-2025-11-13",
+                credential=object(),
+            )
+
+        client._run_red_team(
+            self._fake_sdk(captured),
+            object(),
+            "gpt-5.1",
+            "https://owned.example/api/projects/p",
+        )
+
+        target = captured["target"]
+        assert isinstance(target, dict)
+        # The scan targets the owned deployment name, NOT the model id.
+        self.assertEqual(target["azure_deployment"], "tg4-sol-gpt-5-1-2025-11-13")
+        self.assertNotEqual(target["azure_deployment"], "gpt-5.1")
+
+    def test_given_no_candidate_deployment_when_scanning_then_falls_back_to_model_id(
+        self,
+    ) -> None:
+        captured: dict[str, object] = {}
+        with _allow_azure_import():
+            client = FoundryQualitySafetyEvalClient(
+                azure_ai_project="https://owned.example/api/projects/p",
+                judge_model="judge-1",
+                probe_prompts=("p1",),
+                response_provider=lambda model_id, prompt: "resp",  # type: ignore[arg-type]
+                credential=object(),
+            )
+
+        client._run_red_team(
+            self._fake_sdk(captured), object(), "gpt-4.1", "https://owned.example/api/projects/p"
+        )
+
+        target = captured["target"]
+        assert isinstance(target, dict)
+        self.assertEqual(target["azure_deployment"], "gpt-4.1")
+
+
 class ResolveEvaluatorScoreTests(unittest.TestCase):
     def test_given_bare_key_when_resolving_then_numeric(self) -> None:
         self.assertEqual(resolve_evaluator_score({"coherence": 4.0}, "coherence"), 4.0)

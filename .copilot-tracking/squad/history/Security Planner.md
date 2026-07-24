@@ -83,20 +83,55 @@ Assess security posture for WI-03 live quality/content-safety evaluation harness
 
 ---
 
-**Consumption** (this dispatch):
-- model: claude-3-5-sonnet
-- model_tier: default
-- input_tokens: 8000
-- cached_tokens: 0
-- output_tokens: 3000
-- input_rate: 3.00
-- cached_rate: 0.30
-- output_rate: 15.00
-- est_cost_usd: 0.069
-- est_credits: 6.9
-- basis: tier-default
+---
+
+## Dispatch: OIDC Federated-Credential Fix (gh-main-immutable) — Decision #47 (2026-07-23)
+
+**Member Name**: Kyle
+
+**Request**: 
+Create additional federated credential on app registration `mua-github-oidc` to match GitHub Actions immutable-identifier OIDC token format. Root cause: GitHub Actions updated token subject to include numeric repo ID; prior `gh-main` credential subject (classic format) caused AADSTS700213 mismatch. 
+
+**Action**: ADDITIVE credential creation (keep existing `gh-main` intact; no deletion for reversibility).
+
+**Findings**:
+
+**Verdict**: Executed — Fix Applied ✓
+
+**Outcome Summary**:
+- **NEW Federated Credential Created**: `gh-main-immutable` on app `mua-github-oidc` (appId ea6ff70a-e4fb-48cf-98d9-86dfa3d046db)
+  - Subject: `repo:sohamda@1938772/model-upgrade-automation@1302868165:ref:refs/heads/main` (immutable-identifier format)
+  - Issuer: `https://token.actions.githubusercontent.com`
+  - Audience: `api://AzureADTokenExchange`
+- **Old Credential Preserved**: `gh-main` (classic subject format) left untouched for reversibility
+- **OIDC Login Success**: Re-run (30006889748) successful; token exchange now matches on first attempt
+
+**Risk Assessment**: LOW
+- Additive change (no mutation of existing credential)
+- Reversible (can delete `gh-main-immutable`, fallback to `gh-main` if needed)
+- Aligned with GitHub Actions token evolution (immutable-identifier is new standard format)
+- No role/permission changes; federated credential is purely subject matching
+
+**Residual Considerations**: 
+- Dual-credential state (gh-main + gh-main-immutable) is transitory; recommend cleanup post-validation (delete gh-main once migration confirmed stable)
+- Monitor for future GitHub Actions token format changes; may require additional credentials if GitHub introduces further evolution
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#decision-47--first-successful-read-only-live-run-against-the-new-tenant-after-oidc-fic-fix-2026-07-23`
 
 ---
+
+**Consumption** (this dispatch):
+- model: tier-default
+- model_tier: tier-1/fast
+- input_tokens: 3000
+- cached_tokens: 0
+- output_tokens: 1000
+- input_rate: 0.80
+- cached_rate: 0.08
+- output_rate: 4.00
+- est_cost_usd: 0.0064
+- est_credits: 0.64
+- basis: tier-default
 
 ## Council Dispatch: Infra Provisioning + Live Run Security Posture (2026-07-23)
 
@@ -153,4 +188,55 @@ Assess security posture for provisioning infra/main.bicep resources and executin
 - output_rate: 15.00
 - est_cost_usd: 0.129
 - est_credits: 12.9
+- basis: tier-default
+
+---
+
+## Council Dispatch: Live-Backed Eval Runners Security (2026-07-23)
+
+**Council Verdict Topic**: live-backed-eval-runners
+
+**Request**: 
+Assess security posture for live-backed evaluation runners (LiveCustomRunner, LiveRedTeamRunner) with real Azure OpenAI inference and content-safety API calls. Current situation: Stubbed LocalCustomRunner/LocalRedTeamRunner make zero real API calls; live variants will consume real Azure infrastructure. Evaluate:
+- Azure credential handling (DefaultAzureCredential, no API keys, scope validation)
+- Endpoint and secret logging (sanitization, no endpoint FQDN leakage)
+- Red-team artifact containment (transcripts as sensitive evidence, not public CI artifacts)
+- Result JSON hygiene (aggregate signals only, no harmful content, no raw prompts in public outputs)
+- Content boundary (model output as untrusted data, never instructions)
+- Injection boundary (probe/dataset and model output untrusted; never alter control flow/auth/paths)
+
+**Findings**:
+
+**Verdict**: Go-With-Conditions / Medium risk
+
+**Credential & Auth Assessment**: Keyless AAD via DefaultAzureCredential → token for scope `https://cognitiveservices.azure.com/.default` is correct. Service Principal dba88227-… already holds Cognitive Services User + Contributor at ff-hub-01. No hardcoded keys, no API key acceptance from CLI/env. Risk is operational (logging hygiene, scope creep) not structural.
+
+**Binding Conditions**:
+1. Keyless AAD via DefaultAzureCredential; verify Cognitive Services User + Contributor present at eval scope
+2. No API keys: key fallback only from Key Vault/env, never hard-coded, never written to results/
+3. Redaction pass on all logs/stdout/result JSON: redact bearer tokens, api-key, Authorization headers, endpoint FQDN/query strings
+4. Log account/deployment NAMES not resolved URLs; no raw HTTP request/response dumps on error
+5. Result JSON stores only prompt, response, scores, deployment NAME (not FQDN), timestamp
+6. Red-team transcripts (jailbreak prompts + elicited harmful responses) segregate to results/redteam/, treat as sensitive test evidence
+7. DO NOT upload raw harmful transcripts as public CI artifacts; confirm artifact visibility policy before CI integration
+8. Content boundary: record model output as inert DATA only; never eval/exec/deserialize-and-run
+9. Injection boundary: both probe/dataset AND model output confirmed as untrusted DATA; runner never allows either to alter control flow, tool calls, auth, paths, or config
+
+**Residual Risk**: Logging hygiene (SDK exception leakage, stderr echo). All conditions enforceable via code review + test coverage + redaction lint.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#decision-51-council-verdict-live-backed-eval-runners--go-with-conditions-rai-high-risk-caveat-reuse-validated-quality_safety_eval_client-seam-no-auto-promotion-until-judgeprobe-setcanaries-proven--2026-07-23`
+
+---
+
+**Consumption** (this dispatch):
+- model: unknown
+- model_tier: tier-1
+- input_tokens: 2500
+- cached_tokens: 0
+- output_tokens: 1500
+- input_rate: 0.80
+- cached_rate: 0.08
+- output_rate: 4.00
+- est_cost_usd: 0.008
+- est_credits: 0.8
 - basis: tier-default

@@ -63,3 +63,48 @@ Assess cost posture for provisioning infra/main.bicep resources and executing fu
 - est_cost_usd: 0.083
 - est_credits: 8.3
 - basis: tier-default
+
+---
+
+## Cost Estimate: Paid Live-Provision Variant (gpt-5.1, o3, Codestral-2501) (2026-07-23)
+
+**Request**:
+Indicative cost estimate for paid live variant of `detect-and-eval.yml` with `provision_candidates=true`, `run_evals=false`, provisioning three recommended candidates (gpt-5.1, o3, Codestral-2501) in existing Foundry hub ff-hub-01 (swedencentral), then auto-teardown.
+
+**Findings Summary**:
+
+**Best/Realistic Case**: ≈ $0–$0.10
+- Standard SKU deployments have no provisioning fee, no deletion fee, and no idle hourly charge
+- With `run_evals=false` there is no benchmark inference spend
+- Create→delete with zero inference is effectively free
+
+**Biggest Risk**: **Codestral-2501 Entitlement**
+- Flagged legacy/deprecated by Mistral and NOT present in live Retail Prices API (only generic "Codestral")
+- Provisioning that candidate may fail or need swapping to current Mistral variant (e.g., Mistral Large 2412)
+
+**Worst Case**: Teardown Failure
+- Teardown failure is $0 while idle (Standard SKU)
+- BUT teardown failure + accidental inference (e.g., eval path enabled) could reach **$200–$5000+**
+- Mitigated by `run_evals=false` + immediate teardown
+
+**Guardrails Recommended** (confirm-tier):
+1. Pre-flight entitlement check for the three models
+2. Post-run teardown verification gate (poll ff-hub-01 for lingering candidate deployments, hard-fail if any remain)
+3. Azure Cost Management budget alert on RG ai-resources (alert ~$200) + optional per-deployment token cap
+
+**Confidence**:
+- High on the $0 provisioning/idle/teardown model
+- Low on Codestral-2501 availability (needs manual Foundry portal check)
+
+**Consumption** (this dispatch):
+- model: unknown
+- model_tier: default (tier-default estimate)
+- input_tokens: 1500
+- cached_tokens: 0
+- output_tokens: 1300
+- input_rate: 0.80
+- cached_rate: 0.08
+- output_rate: 4.00
+- est_cost_usd: 0.00642
+- est_credits: 0.642
+- basis: tier-default

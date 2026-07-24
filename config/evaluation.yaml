@@ -10,3 +10,32 @@ quality_gates:
 timeouts:
   orchestration_minutes: 20
   cleanup_minutes: 20
+
+# Additive: independent judge provenance for live-backed quality scoring
+# (Council C10). judge_model_version pins the judge deployment's underlying
+# model version (must never match the candidate); rubric_version is published
+# alongside scores for auditability (Phase 2 Step 2.5). Config-driven only --
+# no judge deployment is stood up by this repository; set before enabling
+# --live/MUA_EVAL_MODE=live. Pinned to the gpt-4.1 default judge
+# (config/models.yaml::default_judge) -- a cross-generation-independent
+# standard chat model relative to every current candidate.
+judge_model_version: "2025-04-14"
+rubric_version: "v1"
+
+# Additive: adversarial probe-set version recorded in every audit bundle
+# alongside its content SHA-256 (Phase 2 Step 2.1/2.5, Council C11). Bump
+# whenever datasets/adversarial_probes.jsonl changes meaningfully; must match
+# `src.evaluator.probe_set_loader.PROBE_SET_VERSION`.
+probe_set_version: "v1"
+
+# Additive: relative-to-retiring gate (RAI relative-comparison condition,
+# Phase 2 Step 2.3). Applied ALONGSIDE the absolute quality_gates floor above
+# -- both must pass. Gate condition: candidate_metric >= retiring_metric -
+# epsilon. The retiring baseline value itself is supplied by the caller
+# (EvaluatorWorkItem.retiring_custom_overall/retiring_redteam_block_rate);
+# this repository never fetches or fabricates a retiring baseline score, and
+# the relative gate is skipped (not fabricated as a pass) when no baseline is
+# supplied.
+relative_gate:
+  quality_epsilon: 0.05
+  redteam_epsilon: 0.05

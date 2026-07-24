@@ -85,6 +85,8 @@ def aggregate_reporter_run(report_input: ReporterRunInput) -> list[RetiringTarge
 						"custom": candidate.custom_path.as_posix(),
 						"redteam": candidate.redteam_path.as_posix(),
 					},
+					promotion_grade=candidate.promotion_grade,
+					advisory=candidate.advisory,
 				)
 			)
 

@@ -24,6 +24,19 @@ def _read_json(path: Path) -> dict[str, object]:
         raise ContractError(f"Reporter artifact is not valid JSON: {path}") from error
 
 
+def _optional_float(value: object) -> float | None:
+    """Return ``value`` as a float, or ``None`` for a missing/UNSCORED signal.
+
+    A live-backed summary may carry an explicit JSON ``null`` for
+    ``custom_overall``/``redteam_block_rate`` when the underlying measurement
+    is UNSCORED; this must be preserved rather than coerced to ``0.0``.
+    """
+
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
 def _build_dataset_hash_status(
     run_context_dataset_sha256: str,
     aca_job_dataset_sha256: str,
@@ -162,8 +175,8 @@ def load_reporter_run_input(repo_root: Path, artifact_root: Path) -> ReporterRun
                     version=str(candidate_model["version"]),
                     deployment_name=str(candidate_model["deployment_name"]),
                     deployment_type=str(candidate_model["deployment_type"]),
-                    custom_overall=float(summary_payload["custom_overall"]),
-                    redteam_block_rate=float(summary_payload["redteam_block_rate"]),
+                    custom_overall=_optional_float(summary_payload.get("custom_overall")),
+                    redteam_block_rate=_optional_float(summary_payload.get("redteam_block_rate")),
                     recommender_score=recommendation[1] if recommendation is not None else None,
                     recommender_rank=recommendation[0] if recommendation is not None else None,
                     recommender_rationale=recommendation[2] if recommendation is not None else [],
@@ -182,6 +195,8 @@ def load_reporter_run_input(repo_root: Path, artifact_root: Path) -> ReporterRun
                     summary_payload=summary_payload,
                     custom_payload=custom_payload,
                     redteam_payload=redteam_payload,
+                    promotion_grade=bool(summary_payload.get("promotion_grade", True)),
+                    advisory=bool(summary_payload.get("advisory", False)),
                 )
             )
 

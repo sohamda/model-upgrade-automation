@@ -143,3 +143,54 @@ Assess architecture soundness for provisioning infrastructure from infra/main.bi
 - est_cost_usd: 0.102
 - est_credits: 10.2
 - basis: tier-default
+
+---
+
+## Council Dispatch: Live-Backed Eval Runners Architecture (2026-07-23)
+
+**Council Verdict Topic**: live-backed-eval-runners
+
+**Request**: 
+Assess architecture soundness for live-backed evaluation runners (LiveCustomRunner, LiveRedTeamRunner) replacing the stubbed LocalCustomRunner/LocalRedTeamRunner. Current local evaluators are fake-backed with zero Azure OpenAI API calls, producing simulated scores. Evaluate:
+- Reuse of proven quality_safety_eval_client seam (AOAI-route fix, live-validated end-to-end)
+- Thin aoai_client.py response provider pattern (injection, lazy construction, DefaultAzureCredential)
+- LiveCustomRunner/LiveRedTeamRunner design (same run signature, azure-ai-evaluation delegation)
+- Reproducibility (temperature=0, seed, raw responses/scores captured)
+- Resilience (exp backoff 3-5x, 30-60s timeout, per-item UNSCORED on failure)
+- Per-model API shape capability-driven from config/models.yaml (data-driven, not hardcoded)
+
+**Findings**:
+
+**Verdict**: Go-With-Conditions / Medium risk
+
+**Seam Assessment**: The architectural seam is sound. Reusing the proven `quality_safety_eval_client` pattern is the primary de-risker; it has been live-validated end-to-end (AOAI-route fix, gpt-4.1, content-safety+red-team all working). Adding thin LiveCustomRunner/LiveRedTeamRunner wrappers delegating to existing azure-ai-evaluation pattern is low-risk. Keep LocalCustomRunner/LocalRedTeamRunner as DEFAULT; live is opt-in via `--live` flag. Residual risk is operational (timeout recovery, per-model API variance) not structural.
+
+**Binding Conditions**:
+1. Reuse the proven quality_safety_eval_client seam and existing azure-ai-evaluation pattern; do not fork
+2. Add thin aoai_client.py provider (chat_completion signature, import-guarded openai/azure-identity, method-body DefaultAzureCredential)
+3. LiveCustomRunner/LiveRedTeamRunner with same run(work_item, dataset) signature as local stubs; delegate to existing pattern
+4. LocalCustomRunner/LocalRedTeamRunner remain DEFAULT; live is opt-in via --live flag / MUA_EVAL_MODE=live
+5. Temperature=0 + seed where supported; raw candidate responses + raw judge scores captured per-row
+6. Fixed/committed red-team probe set (not dynamically generated)
+7. Exponential backoff+jitter 3-5 attempts on 429/5xx/timeout; 30-60s per-request timeout; sequential rows
+8. Per-item failure → UNSCORED(None); do NOT abort candidate
+9. Per-model API shape capability-driven from config/models.yaml (data-driven, not if model== hardcoding)
+
+**Residual Risk**: Operational scope (API shape variance, timeout recovery). Architectural seam itself poses no structural risk.
+
+**Decision Ref**: `.copilot-tracking/squad/decisions.md#decision-51-council-verdict-live-backed-eval-runners--go-with-conditions-rai-high-risk-caveat-reuse-validated-quality_safety_eval_client-seam-no-auto-promotion-until-judgeprobe-setcanaries-proven--2026-07-23`
+
+---
+
+**Consumption** (this dispatch):
+- model: unknown
+- model_tier: tier-1
+- input_tokens: 2500
+- cached_tokens: 0
+- output_tokens: 1500
+- input_rate: 0.80
+- cached_rate: 0.08
+- output_rate: 4.00
+- est_cost_usd: 0.008
+- est_credits: 0.8
+- basis: tier-default

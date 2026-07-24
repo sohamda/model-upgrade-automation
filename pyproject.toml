@@ -19,6 +19,7 @@ evaluation = [
     "azure-ai-evaluation[redteam]>=1.18.1",
     "azure-ai-inference>=1.0.0b7",
     "azure-identity>=1.17",
+    "azure-ai-contentsafety>=1.0.0",
 ]
 
 [tool.setuptools.packages.find]

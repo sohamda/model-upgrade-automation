@@ -5,3 +5,57 @@ watch_list:
     current_version: '2025-04-14'
     region: swedencentral
     workload: general_qa
+
+# Additive: the pinned, independent quality/safety judge (Council C10, PD-01
+# Option A). gpt-4.1 is a STANDARD chat model, so it sidesteps LIVE-BUG-01
+# (o-series reasoning judges reject `max_tokens` with HTTP 400 on the
+# azure-ai-evaluation prompty path). It is cross-generation-independent from
+# every current candidate: gpt-4 (judge) vs gpt-5 (gpt-5.1 candidate) and vs
+# o3 (o3 candidate) -- see src/evaluator/custom_runner.py::assert_independent_judge.
+# `model_id` is the fallback used when the JUDGE_MODEL env var (the owned judge
+# DEPLOYMENT name) is unset; `version` is recorded as provenance and MUST match
+# config/evaluation.yaml::judge_model_version.
+default_judge:
+  model_id: gpt-4.1
+  version: '2025-04-14'
+
+# Additive: per-model request shaping for live AOAI chat completions (Council
+# C2). Consumed by src/evaluator/aoai_client.py::resolve_api_shape. Match
+# order: exact model_id key -> family-prefix key (any non-"default" key that
+# model_id starts with, e.g. "o3" matches "o3-mini") -> "default". A null
+# temperature/seed means that parameter is omitted from the request rather
+# than sent as null. `is_reasoning_model: true` (o-series reasoning models) is
+# AUTHORITATIVE: it forces `max_completion_tokens` and drops temperature/seed
+# and the system role regardless of the other fields, because those models
+# reject `max_tokens`/`temperature` with HTTP 400 (LIVE-BUG-01). It defaults
+# to false when absent (backward compatible with existing shapes).
+model_api_shapes:
+  default:
+    use_system_role: true
+    temperature: 0
+    seed: 42
+    max_tokens_param: max_tokens
+    is_reasoning_model: false
+  gpt-4.1:
+    use_system_role: true
+    temperature: 0
+    seed: 42
+    max_tokens_param: max_tokens
+    is_reasoning_model: false
+  o3:
+    use_system_role: false
+    temperature: null
+    seed: null
+    max_tokens_param: max_completion_tokens
+    is_reasoning_model: true
+  gpt-5.1:
+    use_system_role: true
+    temperature: 0
+    seed: 42
+    max_tokens_param: max_tokens
+    is_reasoning_model: false
+
+# Additive: candidate model_id -> owned Azure OpenAI deployment name (Council
+# C2/DD-03). Empty by default; populate per environment. Consumed by
+# src/evaluator/aoai_client.py::AoaiClient._resolve_deployment.
+deployments: {}

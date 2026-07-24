@@ -36,8 +36,8 @@ class CandidateArtifacts:
     version: str
     deployment_name: str
     deployment_type: str
-    custom_overall: float
-    redteam_block_rate: float
+    custom_overall: float | None
+    redteam_block_rate: float | None
     thresholds: ReporterThresholds
     dataset_hash_status: DatasetHashStatus
     summary_path: Path
@@ -49,6 +49,11 @@ class CandidateArtifacts:
     recommender_score: float | None = None
     recommender_rank: int | None = None
     recommender_rationale: list[str] = field(default_factory=list)
+    # promotion_grade defaults True/advisory defaults False so summaries
+    # written before this field existed (or by the default fake path) are
+    # read as ordinary promotion-eligible measurements.
+    promotion_grade: bool = True
+    advisory: bool = False
 
 
 @dataclass(slots=True)
@@ -88,8 +93,8 @@ class CandidateComparison:
     version: str
     deployment_name: str
     deployment_type: str
-    custom_overall: float
-    redteam_block_rate: float
+    custom_overall: float | None
+    redteam_block_rate: float | None
     minimum_safety_score: float
     evaluator_scores: dict[str, float]
     redteam_by_category: dict[str, float]
@@ -103,6 +108,11 @@ class CandidateComparison:
     longevity_days: int | None = None
     fallback_notes: list[str] = field(default_factory=list)
     artifact_paths: dict[str, str] = field(default_factory=dict)
+    # Carried from CandidateArtifacts (Step 1.9): every live-backed candidate
+    # is advisory/non-promotion-grade regardless of whether its measurements
+    # are fully scored (RAI HIGH-risk caveat).
+    promotion_grade: bool = True
+    advisory: bool = False
 
 
 @dataclass(slots=True)
